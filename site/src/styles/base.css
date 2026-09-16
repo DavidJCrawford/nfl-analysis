@@ -1,0 +1,122 @@
+@import './tokens.css';
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ks-paper);
+  color: var(--ks-text);
+  font-family: var(--ks-font), sans-serif;
+  font-size: var(--ks-type-body-size);
+  line-height: var(--ks-type-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Type ──────────────────────────────────────────────────────────────── */
+h1, h2, h3, h4 { margin: 0; font-weight: 400; text-wrap: balance; }
+
+.display {
+  font-family: var(--ks-font-display), sans-serif;
+  font-size: var(--ks-type-display-size);
+  font-weight: var(--ks-type-display-weight);
+  line-height: var(--ks-type-display-line);
+  letter-spacing: 0;
+  color: var(--ks-ink);
+}
+.headline {
+  font-family: var(--ks-font-display), sans-serif;
+  font-size: var(--ks-type-headline-size);
+  font-weight: var(--ks-type-headline-weight);
+  line-height: var(--ks-type-headline-line);
+  color: var(--ks-ink);
+}
+/* Large type whispers, small type asserts. */
+.title    { font-size: var(--ks-type-title-size); font-weight: var(--ks-type-title-weight); line-height: var(--ks-type-title-line); color: var(--ks-ink); }
+.title-lg { font-size: var(--ks-type-title-lg-size); font-weight: 600; line-height: 1.25; color: var(--ks-ink); }
+.subhead  { font-size: var(--ks-type-subhead-size); font-weight: 400; color: var(--ks-text); }
+.lead     { font-size: var(--ks-type-lead-size); color: var(--ks-text); max-width: var(--ks-measure); }
+.small    { font-size: var(--ks-type-small-size); }
+.ui       { font-size: var(--ks-type-ui-size); }
+
+.eyebrow {
+  font-size: var(--ks-type-eyebrow-size);
+  letter-spacing: var(--ks-type-eyebrow-track);
+  text-transform: uppercase;
+  color: var(--ks-text-muted);
+}
+.mono {
+  font-family: var(--ks-mono), monospace;
+  font-size: var(--ks-type-mono-size);
+  letter-spacing: var(--ks-type-mono-track);
+  text-transform: uppercase;
+  color: var(--ks-text-muted);
+}
+.num { font-variant-numeric: var(--f1-numeric); }
+.muted { color: var(--ks-text-muted); }
+.measure { max-width: var(--ks-measure); }
+
+/* ── Links ─────────────────────────────────────────────────────────────── */
+a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid oklch(13% 0 0 / 0.28);
+  transition: border-color var(--ks-quick) var(--ks-ease), color var(--ks-quick) var(--ks-ease);
+}
+a:hover { border-bottom-color: var(--ks-kinpaku); }
+a.plain { border-bottom: none; }
+a:focus-visible {
+  outline: 2px solid var(--ks-patina-deep);
+  outline-offset: 3px;
+  border-radius: var(--ks-radius-sm);
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+.wrap { width: 100%; max-width: var(--ks-width-max); margin-inline: auto; padding-inline: clamp(20px, 4vw, 48px); }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: clamp(16px, 2vw, 28px); }
+.stack > * + * { margin-top: var(--flow, 1rem); }
+.rule { border: 0; border-top: 1px solid var(--ks-rule); margin: 0; }
+.section { padding-block: clamp(40px, 5vw, 72px); }
+
+/* ── Tables — the workhorse of a data site ─────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: var(--ks-type-small-size); }
+caption { text-align: left; margin-bottom: 12px; }
+th, td { padding: 7px 18px 7px 0; text-align: left; border-bottom: 1px solid var(--ks-rule); }
+th:last-child, td:last-child { padding-right: 0; }
+thead th {
+  font-size: var(--ks-type-eyebrow-size);
+  letter-spacing: var(--ks-type-eyebrow-track);
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ks-text-muted);
+  border-bottom-color: var(--ks-edge);
+  white-space: nowrap;
+}
+/* Right-aligned numeric columns keep their right padding: without it the value
+   butts against the next column and two numbers read as one. */
+td.n, th.n { text-align: right; font-variant-numeric: var(--f1-numeric); }
+tbody tr:last-child td { border-bottom: 0; }
+.table-scroll { overflow-x: auto; }
+
+/* ── Instrument panel ──────────────────────────────────────────────────── */
+.instrument {
+  background: var(--ks-instrument);
+  color: var(--ks-instrument-text);
+  border-radius: var(--ks-radius-md);
+}
+
+/* ── Reduced motion: content motion collapses to a static frame ────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}

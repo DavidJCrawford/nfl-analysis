@@ -1,0 +1,72 @@
+---
+import { Font } from 'astro:assets';
+import { u } from '@lib/url';
+import '@styles/base.css';
+
+interface Props { title: string; description?: string; }
+const { title, description = 'The NFL season, game by game — one permanent page each.' } = Astro.props;
+
+const NAV = [
+  { href: '/games/', label: 'Games' },
+  { href: '/teams/', label: 'Teams' },
+];
+const path = Astro.url.pathname;
+---
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · NFL Analysis</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <Font cssVariable="--ks-font" preload />
+    <Font cssVariable="--ks-font-display" preload />
+    <Font cssVariable="--ks-mono" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="masthead">
+      <div class="wrap masthead-inner">
+        <a class="wordmark plain" href={u('/')}>NFL Analysis</a>
+        <nav aria-label="Sections">
+          {NAV.map((item) => (
+            <a class="plain nav-link" href={u(item.href)}
+               aria-current={path.startsWith(u(item.href)) ? 'page' : undefined}>{item.label}</a>
+          ))}
+        </nav>
+      </div>
+      <hr class="rule" />
+    </header>
+
+    <main id="main"><slot /></main>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute; left: -9999px; top: 0; z-index: 10;
+    background: var(--ks-ink); color: var(--ks-paper);
+    padding: 10px 16px; border-radius: var(--ks-radius-sm);
+  }
+  .skip:focus { left: 12px; top: 12px; }
+
+  .masthead-inner {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 24px; padding-block: 20px; flex-wrap: wrap;
+  }
+  .wordmark {
+    font-size: var(--ks-type-subhead-size);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 500; color: var(--ks-ink);
+  }
+  nav { display: flex; gap: clamp(14px, 2vw, 26px); }
+  .nav-link {
+    font-size: var(--ks-type-ui-size); letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ks-text-muted);
+  }
+  .nav-link[aria-current='page'] {
+    color: var(--ks-ink); border-bottom: 1px solid var(--ks-ink);
+  }
+</style>

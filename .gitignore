@@ -1,0 +1,66 @@
+# ─── Build output ────────────────────────────────────────────────────────────
+dist/
+.astro/
+node_modules/
+*.tsbuildinfo
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# ─── FastF1 cache ────────────────────────────────────────────────────────────
+# Belongs outside the repo entirely — set FASTF1_CACHE. Guarded here in case a
+# stray enable_cache() call writes locally. A season of .ff1pkl is large, and it
+# is invalidated wholesale by any FastF1 version bump.
+*.ff1pkl
+fastf1_http_cache.sqlite*
+cache/
+.fastf1/
+
+# ─── Pipeline intermediates ──────────────────────────────────────────────────
+# Raw streams and interim Parquet are reproducible from the cache and are large.
+# The .sha256 provenance sidecars ARE committed: a changed source hash is the
+# only reliable signal that a past race needs rebuilding.
+data/raw/**
+!data/raw/**/
+!data/raw/**/*.sha256
+data/interim/
+
+# NOTE: site/data/ is deliberately NOT ignored. Emitted data is committed so the
+# site is always buildable from the repo alone and CI never needs network access
+# to F1. See Docs/knowledge/engineering/build-and-release.md.
+
+# ─── Test and audit artefacts ────────────────────────────────────────────────
+.lighthouseci/
+playwright-report/
+test-results/
+__snapshots__/__diff_output__/
+*.lcov
+coverage/
+
+# ─── Local environment ───────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.tool-versions.local
+
+# ─── Editors and OS ──────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# ─── Toolchain caches ────────────────────────────────────────────────────────
+.cache/

@@ -1,0 +1,21 @@
+---
+interface Props { label: string; value: string | number; }
+const { label, value } = Astro.props;
+---
+<div class="stat">
+  <div class="eyebrow">{label}</div>
+  <div class="value num">{value}</div>
+</div>
+
+<style>
+  .stat { min-width: 0; }
+  .stat .value {
+    font-size: clamp(1.15rem, 1.6vw, var(--ks-type-title-lg-size));
+    font-weight: 300;
+    color: var(--ks-ink);
+    line-height: 1.2;
+    margin-top: 2px;
+    overflow-wrap: break-word;
+    hyphens: manual;
+  }
+</style>

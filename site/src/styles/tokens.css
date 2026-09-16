@@ -1,0 +1,107 @@
+/* Design tokens — OKLCH throughout.
+   Derived from Docs/knowledge/design/design-tokens.md. Values were read from the
+   aesthetic reference's compiled stylesheet, not approximated by eye. */
+
+:root {
+  color-scheme: light;
+
+  /* ── Paper ─────────────────────────────────────────────────────────────── */
+  --ks-paper:        oklch(97.8% 0 0);
+  --ks-paper-raised: oklch(99.5% 0 0);
+  --ks-paper-deep:   oklch(95% 0 0);
+  --ks-gray:         oklch(92% 0 0);
+  --ks-gray-2:       oklch(88% 0 0);
+
+  /* ── Ink. Chroma is 0: the neutrals are truly neutral. ─────────────────── */
+  --ks-ink:            oklch(13% 0 0);
+  --ks-text:           oklch(22% 0 0);
+  --ks-text-muted:     oklch(46% 0 0);
+  --ks-text-faint:     oklch(51% 0 0);
+  --ks-text-mute-deep: oklch(66% 0 0);
+  --ks-rule:           oklch(13% 0 0 / 0.08);
+  --ks-edge:           oklch(13% 0 0 / 0.45);
+
+  /* ── Two accents, and one alarm. Never used to encode data. ───────────── */
+  --ks-kinpaku:       oklch(84% 0.19 80.46);
+  --ks-kinpaku-rich:  oklch(77% 0.13 82);
+  --ks-kinpaku-deep:  oklch(61% 0.085 78);
+  --ks-kinpaku-pale:  oklch(86% 0.07 84);
+  --ks-patina:        oklch(70% 0.12 188);
+  --ks-patina-deep:   oklch(45% 0.1 190);
+  --ks-vermilion:     oklch(52% 0.16 35);
+
+  /* Data encoding, not interface. The vermilion above is reserved for alarm
+     states and in any case only reaches 2.78:1 on the instrument panel, under
+     the 3:1 WCAG floor for graphical objects. This clears it at 3.75:1. */
+  --f1-corner:        oklch(60% 0.21 28);
+
+  /* ── Instrument: dark surfaces set into a light page. ──────────────────── */
+  --ks-instrument:        oklch(24% 0 0);
+  --ks-instrument-deep:   oklch(17% 0 0);
+  --ks-instrument-raised: oklch(31% 0 0);
+  --ks-instrument-text:   oklch(93% 0 0);
+  --ks-instrument-muted:  oklch(68% 0 0);
+  --ks-instrument-rule:   oklch(100% 0 0 / 0.12);
+
+  /* ── Type ──────────────────────────────────────────────────────────────── */
+  --ks-type-display-size:   clamp(3.2rem, 6.2vw, 5.6rem);
+  --ks-type-display-weight: 200;
+  --ks-type-display-line:   1;
+  --ks-type-headline-size:  clamp(2.4rem, 3.6vw, 3.4rem);
+  --ks-type-headline-weight:300;
+  --ks-type-headline-line:  1.04;
+  --ks-type-title-lg-size:  1.5rem;
+  --ks-type-subhead-size:   1.25rem;
+  --ks-type-lead-size:      1.125rem;
+  --ks-type-title-size:     1.0625rem;
+  --ks-type-title-weight:   600;
+  --ks-type-title-line:     1.35;
+  --ks-type-body-size:      1rem;
+  --ks-type-body-line:      1.65;
+  --ks-type-ui-lead:        0.9375rem;
+  --ks-type-small-size:     0.875rem;
+  --ks-type-ui-size:        0.8125rem;
+  --ks-type-label-size:     0.75rem;
+  --ks-type-eyebrow-size:   0.6875rem;
+  --ks-type-eyebrow-track:  0.14em;
+  --ks-type-mono-size:      0.6875rem;
+  --ks-type-mono-track:     0.12em;
+
+  /* The reference has no font-variant-numeric anywhere. It is a marketing
+     site. We are a data site: every lap time and gap must align in a column. */
+  --f1-numeric: tabular-nums lining-nums;
+
+  /* ── Space, radius, elevation ─────────────────────────────────────────── */
+  --ks-radius-sm:   3px;
+  --ks-radius-md:   8px;
+  --ks-radius-pill: 999px;
+  --ks-section-pad: clamp(72px, 8vw, 120px);
+  --ks-control-sm:  26px;
+  --ks-control-md:  32px;
+  --ks-control-lg:  44px;
+  --ks-width-max:   1320px;
+  --ks-measure:     68ch;
+
+  --ks-lift-1: 0 1px 1px oklch(13% 0 0/.05), 0 2px 3px oklch(13% 0 0/.04), 0 6px 12px oklch(13% 0 0/.05);
+  --ks-lift-2: 0 1px 1px oklch(13% 0 0/.04), 0 3px 5px oklch(13% 0 0/.05), 0 12px 20px oklch(13% 0 0/.06), 0 32px 48px oklch(13% 0 0/.07);
+
+  /* ── Motion. Chrome only. Content motion is governed separately by
+        Docs/knowledge/policies/motion-policy.md. ────────────────────────── */
+  --ks-quick:  0.12s;
+  --ks-settle: 0.2s;
+  --ks-ease:   cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Instrument panels remap tokens in scope rather than theming the page.
+   This is how a dark surface sits on a light page without a theme switch. */
+.instrument {
+  color-scheme: dark;
+  --ks-paper:        var(--ks-instrument);
+  --ks-paper-raised: var(--ks-instrument-raised);
+  --ks-paper-deep:   var(--ks-instrument-deep);
+  --ks-ink:          var(--ks-instrument-text);
+  --ks-text:         var(--ks-instrument-text);
+  --ks-text-muted:   var(--ks-instrument-muted);
+  --ks-text-faint:   var(--ks-instrument-muted);
+  --ks-rule:         var(--ks-instrument-rule);
+}
