@@ -32,8 +32,28 @@
 
   /* Data encoding, not interface. The vermilion above is reserved for alarm
      states and in any case only reaches 2.78:1 on the instrument panel, under
-     the 3:1 WCAG floor for graphical objects. This clears it at 3.75:1. */
+     the 3:1 WCAG floor for graphical objects. This clears it at 3.75:1.
+
+     One value, two names: --f1-corner is what the F1 project called it and is
+     kept so the two design systems stay in step. --nfl-turnover is what it
+     means here, and is the name NFL code should use. It marks the one class of
+     event that is neither good nor neutral for the team holding the ball. */
   --f1-corner:        oklch(60% 0.21 28);
+  --nfl-turnover:     var(--f1-corner);
+
+  /* ── The field. ─────────────────────────────────────────────────────────
+     Two greens, dark enough to sit inside the instrument panel without glowing
+     and far enough apart that the goal line reads as an edge without a line
+     being drawn on it. The green is deliberately faint: at this size the field
+     is a diagram, and a diagram that shouts about being grass makes the ball
+     and the lines on it harder to read. */
+  --nfl-turf:         oklch(26% 0.018 145);
+  /* The lettering on the strip — the clubs' names and the quarter marks. It is
+     furniture rather than data, but it is the whole difference between a shape
+     and a story, so it is set to be read rather than to be found. */
+  --nfl-strip-ink:    oklch(100% 0 0);
+  --nfl-strip-chip:   oklch(14% 0 0 / 0.92);
+  --nfl-turf-end:     oklch(21% 0.024 145);
 
   /* ── Instrument: dark surfaces set into a light page. ──────────────────── */
   --ks-instrument:        oklch(24% 0 0);

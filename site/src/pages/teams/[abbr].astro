@@ -1,0 +1,168 @@
+---
+/** One team's season: every week in order, with the bye drawn as the absence
+ *  it is. Most of the page is fixture, as it is everywhere else on this site. */
+import Base from '@layouts/Base.astro';
+import Stat from '@components/Stat.astro';
+import { getRecords, getTeams, getTeamSeason, getWeeks, getGames } from '@lib/data';
+import { record, shortDate, signed, longDate } from '@lib/format';
+import { gameUrl, u } from '@lib/url';
+
+export async function getStaticPaths() {
+  const { getTeams } = await import('@lib/data');
+  return Object.keys(getTeams()).map((abbr) => ({ params: { abbr }, props: { abbr } }));
+}
+
+const { abbr } = Astro.props as { abbr: string };
+const teams = getTeams();
+const team = teams[abbr]!;
+const weeks = getWeeks();
+const season = getTeamSeason(abbr);
+const rec = getRecords().get(abbr)!;
+
+const rows = weeks.map((w, k) => {
+  const g = season[k];
+  if (!g) return { week: w.week, bye: true as const };
+  const home = g.home === abbr;
+  const opp = home ? g.away : g.home;
+  const own = home ? g.home_score : g.away_score;
+  const other = home ? g.away_score : g.home_score;
+  return {
+    week: w.week, bye: false as const, g, home, opp, own, other,
+    result: !g.played || own === undefined || other === undefined
+      ? null : own > other ? 'W' : own < other ? 'L' : 'T',
+  };
+});
+
+const played = rows.filter((r) => !r.bye && r.result !== null) as Extract<typeof rows[number], { bye: false }>[];
+const pointsFor = played.reduce((n, r) => n + (r.own ?? 0), 0);
+const pointsAgainst = played.reduce((n, r) => n + (r.other ?? 0), 0);
+
+const next = rows.find((r) => !r.bye && r.result === null) as
+  Extract<typeof rows[number], { bye: false }> | undefined;
+
+const allGames = getGames();
+const homeGames = allGames.filter((g) => g.home === abbr).length;
+---
+
+<Base title={team.name} description={`${team.name} — the 2026 season, week by week.`}>
+  <header class="wrap section head">
+    <p class="eyebrow">
+      <a class="plain" href={u('/teams/')}>Teams</a> · {team.div}
+    </p>
+    <div class="titling">
+      {/* Decorative: the club's name is right beside it. One file, the club
+          whose page this is — the same rule a game page follows. */}
+      <img class="crest" src={u(`/logos/${abbr}.png`)} alt="" width="64" height="64" />
+      <h1 class="display">
+        <span class="place">{team.name.replace(` ${team.nick}`, '')}</span>
+        <span class="nick">{team.nick}</span>
+      </h1>
+    </div>
+
+    <div class="stats">
+      <Stat label="Record" value={record(rec)} />
+      <Stat label="Points for" value={pointsFor} />
+      <Stat label="Points against" value={pointsAgainst} />
+      <Stat label="Differential" value={signed(pointsFor - pointsAgainst)} />
+    </div>
+
+    <p class="lead measure" style="margin-top:28px">
+      {played.length === 0
+        ? <>No games played yet. {homeGames} of the {allGames.filter((g) => g.home === abbr || g.away === abbr).length} are at home.</>
+        : <>{played.length} played, {homeGames} home games in all.</>}
+      {next && <> Next: {next.home ? '' : 'away to '}{teams[next.opp]!.nick} on {longDate(next.g.date)}.</>}
+    </p>
+  </header>
+
+  <hr class="rule" />
+
+  <section class="wrap section" aria-labelledby="season">
+    <h2 id="season" class="headline">Season</h2>
+
+    <ol class="weeks">
+      {rows.map((r) => (
+        r.bye ? (
+          <li class="week bye">
+            <span class="wk num">{r.week}</span>
+            <span class="bye-mark">Bye</span>
+          </li>
+        ) : (
+          <li class:list={['week', { played: r.result !== null }]}>
+            <span class="wk num">{r.week}</span>
+            <a class="plain body" href={gameUrl(r.g.id)}>
+              <span class="when">{shortDate(r.g.date)}{r.g.weekday !== 'Sunday' ? ` · ${r.g.weekday.slice(0, 3)}` : ''}</span>
+              <span class="opp">
+                <span class="at">{r.home ? 'vs' : 'at'}</span>
+                <span class="name">{teams[r.opp]!.nick}</span>
+                {r.g.div && <span class="badge">div</span>}
+                {r.g.neutral && <span class="badge">neutral</span>}
+              </span>
+              <span class="outcome num">
+                {r.result === null
+                  ? <span class="tbd">{r.g.kickoff} ET</span>
+                  : <><span class={`res ${r.result}`}>{r.result}</span> {r.own}<span class="sep">–</span>{r.other}</>}
+              </span>
+            </a>
+          </li>
+        )
+      ))}
+    </ol>
+  </section>
+</Base>
+
+<style>
+  .head { padding-bottom: clamp(24px, 3vw, 40px); }
+
+  /* The crest stands to the left of the club's name and is sized from it, as
+     it is on a game page: the h1's own two line boxes — the place at 0.42em
+     over the nick, both on a line-height of 1 — and a quarter again on top. */
+  .titling {
+    display: flex; align-items: center; gap: clamp(14px, 1.8vw, 28px);
+    margin-top: clamp(8px, 1vw, 14px);
+    --naming-h: calc(var(--ks-type-display-size) * 1.42);
+  }
+  .titling .display { min-width: 0; }
+  .crest { flex: none; height: calc(var(--naming-h) * 1.25); width: auto; aspect-ratio: 1; }
+  .display .place { display: block; font-size: 0.42em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ks-text-muted); font-family: var(--ks-font), sans-serif; font-weight: 500; }
+  .display .nick { display: block; }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: clamp(18px, 3vw, 40px);
+    margin-top: clamp(28px, 4vw, 48px);
+    padding-top: 22px; border-top: 1px solid var(--ks-edge);
+    max-width: 760px;
+  }
+  .headline { margin-top: 0.2em; }
+
+  .weeks { list-style: none; margin: 28px 0 0; padding: 0; max-width: 780px; }
+  .week { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--ks-rule); }
+  .wk { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); text-align: right; }
+  .body {
+    display: grid; grid-template-columns: 96px 1fr auto; gap: 14px; align-items: baseline;
+    padding: 9px 0; border: 0;
+  }
+  .body:hover { background: var(--ks-paper-deep); }
+  .when { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); }
+  .opp { display: flex; align-items: baseline; gap: 7px; }
+  .at { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); text-transform: uppercase; letter-spacing: 0.08em; }
+  .name { font-size: var(--ks-type-ui-size); color: var(--ks-text-faint); }
+  .played .name { color: var(--ks-ink); }
+  .badge {
+    font-size: 0.5625rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ks-text-mute-deep); border: 1px solid var(--ks-gray-2);
+    border-radius: var(--ks-radius-pill); padding: 1px 6px;
+  }
+  .outcome { font-size: var(--ks-type-ui-size); color: var(--ks-ink); }
+  .res { font-weight: 600; margin-right: 4px; color: var(--ks-text-muted); }
+  .res.W { color: var(--ks-ink); }
+  .sep { padding-inline: 1px; color: var(--ks-text-mute-deep); }
+  .tbd { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); }
+
+  /* A bye is a week with no game in it, and looks like one. */
+  .week.bye { min-height: 40px; }
+  .bye-mark {
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ks-text-mute-deep);
+  }
+
+</style>

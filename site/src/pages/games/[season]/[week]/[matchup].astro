@@ -1,0 +1,347 @@
+---
+/**
+ * One game. The same URL whether it has been played or not — SPEC §4, and the
+ * reason the site's description says "one permanent page each".
+ *
+ * Before kickoff the page is the fixture: when, where, who, and how each side
+ * has done so far. Afterwards the same URL is the report. Generating all 272
+ * costs nothing and means every cell of the schedule on the front page leads
+ * somewhere, which is not true if only played games have pages.
+ */
+import Base from '@layouts/Base.astro';
+import Stat from '@components/Stat.astro';
+import BoxScore from '@components/game/BoxScore.astro';
+import PlayerLines from '@components/game/PlayerLines.astro';
+import PlayLog from '@components/game/PlayLog.astro';
+import GameReplay from '@components/game/GameReplay.astro';
+import { getGame, getGames, getRecords, getTeams } from '@lib/data';
+import { lineScore } from '@lib/game';
+import { longDate, record, sentence } from '@lib/format';
+import { gameUrl, u } from '@lib/url';
+
+export async function getStaticPaths() {
+  const { getGames } = await import('@lib/data');
+  const { gameParts } = await import('@lib/url');
+  return getGames().map((g) => ({ params: gameParts(g.id), props: { id: g.id } }));
+}
+
+const { id } = Astro.props as { id: string };
+const teams = getTeams();
+const row = getGames().find((g) => g.id === id)!;
+const game = row.detail ? getGame(id) : null;
+
+const away = teams[row.away]!;
+const home = teams[row.home]!;
+const records = getRecords();
+
+const title = `${away.nick} at ${home.nick}`;
+const subtitle = `Week ${row.week} · ${longDate(row.date)}`;
+
+// ── Played ────────────────────────────────────────────────────────────────
+const quarters = game ? lineScore(game) : [];
+const winner = game
+  ? (game.home_score === game.away_score ? null : game.home_score > game.away_score ? game.home : game.away)
+  : null;
+
+const quarterLabel = (q: number) => (q <= 4 ? String(q) : q === 5 ? 'OT' : `OT${q - 4}`);
+
+// ── Not yet played ────────────────────────────────────────────────────────
+/** The five most recent games each side has played, most recent last, so the
+ *  fixture page says something true about form rather than nothing at all. */
+const formOf = (abbr: string) =>
+  getGames()
+    .filter((g) => g.played && (g.home === abbr || g.away === abbr))
+    .slice(-5)
+    .map((g) => {
+      const atHome = g.home === abbr;
+      const own = atHome ? g.home_score! : g.away_score!;
+      const other = atHome ? g.away_score! : g.home_score!;
+      return { g, atHome, own, other, opp: atHome ? g.away : g.home, w: own > other, t: own === other };
+    });
+
+---
+
+<Base title={title} description={`${subtitle}. ${row.stadium ?? ''}`.trim()}>
+  <article>
+    <header class="wrap section head">
+      <p class="eyebrow">
+        <a class="plain" href={u('/')}>Games</a> · Week {row.week} · {longDate(row.date)}
+        {row.weekday !== 'Sunday' && <> · {row.weekday}</>}
+        {row.div && <> · division game</>}
+        {row.neutral && <> · neutral site</>}
+      </p>
+
+      <div class="score-line">
+        <div class="team away">
+          {/* Decorative: the club's name is the next thing along, so a screen
+              reader announcing the crest as well would say it twice. */}
+          <img class="crest" src={u(`/logos/${row.away}.png`)} alt="" width="64" height="64" />
+          <div class="naming">
+            <a class="plain nick" href={u(`/teams/${row.away}/`)}>{away.nick}</a>
+            <span class="place">{away.name.replace(` ${away.nick}`, '')}</span>
+          </div>
+        </div>
+        <div class="figures">
+          {row.played ? (
+            <>
+              <span class:list={['pts num', { won: winner === row.away }]}>{row.away_score}</span>
+              <span class="dash" aria-hidden="true">–</span>
+              <span class:list={['pts num', { won: winner === row.home }]}>{row.home_score}</span>
+            </>
+          ) : (
+            <span class="kick num">{row.kickoff}<span class="tz">ET</span></span>
+          )}
+        </div>
+        <div class="team home">
+          <img class="crest" src={u(`/logos/${row.home}.png`)} alt="" width="64" height="64" />
+          <div class="naming">
+            <a class="plain nick" href={u(`/teams/${row.home}/`)}>{home.nick}</a>
+            <span class="place">{home.name.replace(` ${home.nick}`, '')}</span>
+          </div>
+        </div>
+      </div>
+
+      {row.played && game && (
+        <table class="linescore num">
+          <caption class="visually-hidden">Score by quarter</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Team</span></th>
+              {quarters.map((q) => <th scope="col">{quarterLabel(q.q)}</th>)}
+              <th scope="col" class="final">Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">{game.away}</th>{quarters.map((q) => <td>{q.away}</td>)}<td class="final">{game.away_score}</td></tr>
+            <tr><th scope="row">{game.home}</th>{quarters.map((q) => <td>{q.home}</td>)}<td class="final">{game.home_score}</td></tr>
+          </tbody>
+        </table>
+      )}
+
+      <p class="venue small">
+        {row.stadium ?? 'Venue to be confirmed'}
+        {row.roof && <> · {sentence(row.roof)}</>}
+        {game?.venue.surface && <> · {sentence(game.venue.surface)}</>}
+        {game?.venue.sky && <> · {game.venue.sky}, {game.venue.temp}°F, wind {game.venue.wind} mph</>}
+        {game?.officials.referee && <> · referee {game.officials.referee}</>}
+      </p>
+    </header>
+
+    {game ? (
+      <>
+        {game.notes.length > 0 && (
+          <div class="wrap">
+            <aside class="gaps">
+              <h2 class="title">What is missing from this game</h2>
+              <ul>{game.notes.map((n) => <li>{n}</li>)}</ul>
+              <p class="small">
+                Listed rather than drawn over. Everything else on this page comes from the
+                play-by-play as published.
+              </p>
+            </aside>
+          </div>
+        )}
+
+        <section class="wrap section replay-section" aria-labelledby="replay">
+          {/* The section's accessible name. The block below is a control and a
+              picture, so nothing here needs to be said twice on screen. */}
+          <h2 id="replay" class="visually-hidden">Replay this game</h2>
+          <GameReplay game={game} teams={teams} />
+        </section>
+
+        <hr class="rule" />
+
+        <section class="wrap section" aria-labelledby="log">
+          <h2 id="log" class="headline">Plays</h2>
+          <div style="margin-top:28px"><PlayLog game={game} teams={teams} /></div>
+        </section>
+
+        <hr class="rule" />
+
+        <section class="wrap section totals" aria-labelledby="box">
+          <h2 id="box" class="headline">Totals</h2>
+          <div class="box-wrap"><BoxScore game={game} /></div>
+          <div style="margin-top:48px"><PlayerLines game={game} /></div>
+          <p class="small muted" style="margin-top:20px">
+            Rushing lines with a single carry and receiving lines with no catch are left out;
+            everything else is here. Two-point plays are excluded from the attempt counts,
+            as they are on any box score.
+          </p>
+        </section>
+      </>
+    ) : (
+      <section class="wrap section" aria-labelledby="fixture">
+        <p class="eyebrow">Not played yet</p>
+        <h2 id="fixture" class="headline">This is a fixture</h2>
+        <p class="lead measure" style="margin-top:.8em">
+          {row.played
+            ? <>The final score is known but the play-by-play has not been published yet. nflverse
+               lands the schedule first and the plays follow, usually within a day.</>
+            : <>Kickoff is {row.kickoff} US Eastern on {longDate(row.date)}.</>}
+        </p>
+
+        <div class="stats">
+          <Stat label="Week" value={row.week} />
+          <Stat label="Rest — away" value={row.away_rest != null ? `${row.away_rest} days` : '—'} />
+          <Stat label="Rest — home" value={row.home_rest != null ? `${row.home_rest} days` : '—'} />
+          <Stat label="Line" value={row.spread != null
+            ? `${row.spread === 0 ? 'Level' : `${row.spread > 0 ? home.abbr : away.abbr} by ${Math.abs(row.spread)}`}`
+            : 'Not posted'} />
+        </div>
+        {row.spread == null && (
+          <p class="small muted" style="margin-top:14px">
+            Sportsbooks post a line about two weeks ahead of kickoff, so most of the season has
+            none. It will appear here when it does.
+          </p>
+        )}
+
+        <div class="form">
+          {[row.away, row.home].map((abbr) => (
+            <div class="form-side">
+              <h3 class="title">
+                {teams[abbr]!.nick}
+                <span class="rec num">{record(records.get(abbr)!)}</span>
+              </h3>
+              {formOf(abbr).length === 0 ? (
+                <p class="small muted">No games played yet this season.</p>
+              ) : (
+                <ol class="form-list">
+                  {formOf(abbr).map((f) => (
+                    <li>
+                      <a class="plain" href={gameUrl(f.g.id)}>
+                        <span class:list={['res', { w: f.w, t: f.t }]}>{f.t ? 'T' : f.w ? 'W' : 'L'}</span>
+                        <span class="opp">{f.atHome ? '' : '@'}{f.opp}</span>
+                        <span class="sc num">{f.own}–{f.other}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+  </article>
+</Base>
+
+<style>
+  .head { padding-bottom: clamp(24px, 3vw, 40px); }
+
+  .score-line {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: clamp(16px, 4vw, 48px);
+    align-items: center;
+    margin-top: clamp(20px, 3vw, 34px);
+  }
+  /* The crest stands outside the name — away to the left of it, home to the
+     right — so the pair face in towards the score between them. Both files are
+     already fetched for the replay's scorebug, so they cost nothing here. */
+  .team {
+    min-width: 0; display: flex; align-items: center; gap: clamp(10px, 1.4vw, 20px);
+    /* The name block's height: the nick's own line box plus the place under it.
+       Named, because the crest is sized from it. */
+    --naming-h: calc(clamp(1.8rem, 4vw, 3rem) * 1.02 + var(--ks-type-ui-size) * 1.65);
+  }
+  .team.home { flex-direction: row-reverse; text-align: right; }
+  .naming { min-width: 0; }
+  /* A quarter again over the name's height, so the crest carries some weight
+     of its own without leaving the line it belongs to. Square, because the
+     files are.
+     Sized rather than stretched to the row: a flex item that stretches still
+     offers its own intrinsic height to the row first, and a 500px image would
+     set the row to 500px before the stretch ever applied. */
+  .crest {
+    flex: none;
+    height: calc(var(--naming-h) * 1.25);
+    width: auto; aspect-ratio: 1;
+  }
+  .nick {
+    display: block;
+    font-family: var(--ks-font-display), sans-serif;
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 300; line-height: 1.02;
+    color: var(--ks-ink);
+  }
+  .place { display: block; font-size: var(--ks-type-ui-size); color: var(--ks-text-muted); letter-spacing: 0.06em; }
+
+  .figures { display: flex; align-items: baseline; gap: 10px; font-variant-numeric: var(--f1-numeric); }
+  .pts {
+    font-family: var(--ks-font-display), sans-serif;
+    font-size: clamp(2.6rem, 6vw, 4.4rem);
+    font-weight: 200; line-height: 1;
+    color: var(--ks-text-mute-deep);
+  }
+  .pts.won { color: var(--ks-ink); font-weight: 300; }
+  .dash { color: var(--ks-gray-2); font-size: clamp(1.4rem, 3vw, 2rem); }
+  .kick { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 300; color: var(--ks-text-muted); }
+  .tz { margin-left: 5px; font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.1em; }
+
+  /* The quarters and the venue sit in the lower half of the header, with about
+     as much air above them as the header leaves below them — they were up
+     against the score with the whole gap underneath. */
+  .linescore {
+    width: auto; margin: clamp(38px, 5.6vw, 72px) auto 0;
+    font-size: var(--ks-type-ui-size);
+  }
+  .linescore th, .linescore td { padding: 5px 12px; text-align: center; border-bottom: 1px solid var(--ks-rule); }
+  .linescore thead th { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-muted); border-bottom-color: var(--ks-edge); }
+  .linescore th[scope='row'] { text-align: left; font-weight: 600; color: var(--ks-ink); padding-left: 0; }
+  .linescore td { color: var(--ks-text-muted); }
+  .linescore .final { color: var(--ks-ink); font-weight: 600; border-left: 1px solid var(--ks-rule); }
+
+  .venue { margin-top: 28px; text-align: center; color: var(--ks-text-muted); }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: clamp(18px, 3vw, 40px);
+    padding-top: 22px; border-top: 1px solid var(--ks-edge);
+    max-width: 760px;
+  }
+  .headline { margin-top: 0.2em; }
+
+  /* The team totals are one centred object: the eyebrow and the heading stand
+     over the middle of the table rather than out at the left margin, and the
+     table is only as wide as it needs to be. At 720px the two columns of
+     numbers sat at opposite edges with a lake between them, which reads as a
+     table spread across the page rather than a block centred on it. */
+  .totals > .headline { text-align: center; }
+  .box-wrap { margin: 28px auto 0; max-width: 520px; }
+  .replay-section { padding-top: clamp(50px, 6.5vw, 86px); }
+
+  /* An absence, stated. Every one of these began as something that could have
+     been drawn over instead. */
+  .gaps {
+    margin-top: 8px; padding: 18px 20px;
+    border: 1px solid var(--ks-kinpaku-pale);
+    border-left: 3px solid var(--ks-kinpaku-deep);
+    border-radius: var(--ks-radius-sm);
+    background: var(--ks-paper-raised);
+  }
+  .gaps ul { margin: 8px 0 10px; padding-left: 18px; font-size: var(--ks-type-small-size); color: var(--ks-text); }
+  .gaps p { margin: 0; color: var(--ks-text-muted); }
+
+  /* ── Fixture ───────────────────────────────────────────────────────────── */
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 4vw, 56px); margin-top: 48px; }
+  .form-side .title { display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--ks-edge); }
+  .form-side .rec { font-size: var(--ks-type-ui-size); font-weight: 400; color: var(--ks-text-muted); }
+  .form-list { list-style: none; margin: 0; padding: 0; }
+  .form-list a {
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline;
+    padding: 6px 0; border: 0; border-bottom: 1px solid var(--ks-rule);
+    font-size: var(--ks-type-ui-size);
+  }
+  .form-list a:hover { background: var(--ks-paper-deep); }
+  .res { font-weight: 600; color: var(--ks-text-muted); }
+  .res.w { color: var(--ks-ink); }
+  .opp { color: var(--ks-text); }
+  .sc { color: var(--ks-text-muted); font-size: var(--ks-type-eyebrow-size); }
+
+  @media (max-width: 620px) {
+    .score-line { grid-template-columns: 1fr; text-align: center; gap: 12px; }
+    .team.home { text-align: center; }
+    .team { justify-content: center; }
+    .figures { justify-content: center; }
+  }
+</style>

@@ -1,0 +1,630 @@
+---
+/**
+ * The game replayed down the field, play by play.
+ *
+ * Same shape as the F1 race replay: a full-screen dark overlay, transport
+ * controls, a strip along the bottom, Canvas 2D. What is behind it is
+ * different, and the difference is the whole design:
+ *
+ *   THERE IS NO TRACKING DATA. SPEC §3.1.
+ *
+ * The NFL's 22-player tracking is released only for specific historical weeks
+ * under Kaggle terms and does not exist for 2026. So this replay shows the
+ * ball, the chains and the drive, and nothing that would imply it knows where
+ * anybody was standing. Concretely:
+ *
+ *   - the ball is drawn on the centre of the field, because the data gives a
+ *     yard line and not a position. The overlay says so.
+ *   - a play's travel is the snap spot to the spot at the whistle. Where the
+ *     data does not give an end spot the ball does not move, and the caption
+ *     says the spot is unknown rather than sliding it somewhere plausible.
+ *   - between plays the ball is *placed*, not tweened, whenever the next snap
+ *     is somewhere other than the last whistle — a penalty, a loose ball, a
+ *     change of possession. That re-spot is drawn as a dotted move with its
+ *     reason, because it is not something anybody ran.
+ *
+ * The clock is the other thing worth being explicit about. A play's real
+ * duration is not in the play-by-play — the gap between two clock stamps is the
+ * play plus the huddle — so each play is given the same beat, and the replay
+ * advances play by play rather than in real time. The strip along the bottom is
+ * laid out the same way, one slot per play.
+ *
+ * The camera does not move. On a hundred-yard field, field position is the
+ * subject, and a camera that followed the ball would take away the one thing
+ * the reader is here to see.
+ */
+import type { Game, Teams } from '@lib/types';
+import { isPlay, gameLength, countLeadChanges, versusSpread } from '@lib/game';
+import { signed } from '@lib/format';
+import { u } from '@lib/url';
+
+interface Props { game: Game; teams: Teams; }
+const { game, teams } = Astro.props;
+
+const home = teams[game.home]!;
+const away = teams[game.away]!;
+
+/** The replay's payload is the emitted plays themselves.
+ *
+ *  This used to be a hand-written mapping that renamed every field into a
+ *  shorter one. Three separate times a field was added to emit.py and quietly
+ *  failed to reach the replay through it — air yards, yards after catch,
+ *  timeouts — and each time the feature simply did nothing, with no error
+ *  anywhere. Passing the plays through unchanged removes the whole class of
+ *  bug: there is nothing left to forget to update.
+ *
+ *  The notes (timeouts, quarter ends) are dropped, because the replay steps
+ *  through plays. Everything else travels as it was emitted. */
+const frames = game.plays.filter(isPlay);
+
+/** The same four figures the head of the page carries, on one line above the
+ *  strip they describe. `isPlay` is what the page counts plays with too, so
+ *  the two cannot disagree. Where the market set no line there is nothing to
+ *  be either side of, and the margin is the honest thing to say instead. */
+const leads = countLeadChanges(game);
+const spread = versusSpread(game);
+const winner = game.home_score === game.away_score
+  ? null
+  : game.home_score > game.away_score ? game.home : game.away;
+const note = [
+  `${frames.length} plays`,
+  `${game.drives.length} drives`,
+  `${leads} lead change${leads === 1 ? '' : 's'}`,
+  spread
+    ? `Against the line: ${signed(spread.diff, 1)}`
+    : `Margin: ${signed(game.home_score - game.away_score)}`,
+].join(' · ');
+
+const payload = {
+  home: game.home, away: game.away,
+  homeName: home.nick, awayName: away.nick,
+  homeColor: home.color, awayColor: away.color,
+  homeColor2: home.color2, awayColor2: away.color2,
+  finalHome: game.home_score, finalAway: game.away_score,
+  length: gameLength(game),
+  drives: game.drives.map((d) => ({ n: d.n, pos: d.pos, result: d.result })),
+  frames,
+  logos: u('/logos/'),
+};
+---
+
+<div class="replay-mount">
+  <div class="cue">
+    <p class="cue-note">{note}</p>
+    <button class="open" type="button" data-replay-open>Replay this game</button>
+  </div>
+
+  {/* The replay's own strip, drawn once on the page as the last play leaves
+      it. The shape of the game without opening anything. */}
+  <div class="still instrument">
+    <canvas data-strip-still role="img"
+            aria-label={`Where the ball was through the game, play by play — ${away.nick} at ${home.nick}`}
+    ></canvas>
+  </div>
+
+  {/* What the market expected of the game the strip has just drawn, under the
+      strip and under the figure above it that scores the difference. */}
+  {spread && (
+    <p class="market">
+      The market had {spread.expected === 0 ? 'the game level' : <>
+        {spread.expected > 0 ? home.nick : away.nick} by {Math.abs(spread.expected)}</>};
+      it finished {winner ? <>{teams[winner]!.nick} by {Math.abs(spread.actual)}</> : 'tied'}.
+    </p>
+  )}
+
+  <dialog class="stage instrument" data-replay aria-label={`Replay of ${away.nick} at ${home.nick}`}>
+    <div class="stage-inner">
+      <button class="close" type="button" data-replay-close aria-label="Close the replay">Close</button>
+
+      <div class="field-wrap">
+        <canvas data-field></canvas>
+
+        <!-- The flag. A card over the middle of the field, held long enough to
+             read, with the offending club's own mark on it. -->
+        <div class="flag" data-flag aria-hidden="true">
+          <div class="flag-card">
+            <span class="flag-edge" data-flag-edge aria-hidden="true"></span>
+            <img class="flag-mark" data-flag-mark alt="" width="64" height="64" />
+            <p class="flag-title" data-flag-title>Penalty</p>
+            <p class="flag-kind" data-flag-kind></p>
+            <p class="flag-meta" data-flag-meta></p>
+            <span class="flag-timer" data-flag-timer aria-hidden="true"></span>
+          </div>
+        </div>
+      </div>
+
+      <header class="bug-row">
+        <!-- The toast is a sibling of the bug and sits directly on top of it,
+             so the two touch. It starts translated down by its own height,
+             behind the bug, and slides out from under it. -->
+        <div class="bug-stack">
+          <div class="toast-slot">
+            <p class="toast" data-toast aria-hidden="true"></p>
+          </div>
+
+          <div class="bug">
+            <div class="side away" data-side="away">
+              <span class="edge" style={`background:${away.color}`} aria-hidden="true"></span>
+              <img class="mark" src={u(`/logos/${game.away}.png`)} alt={away.name} width="40" height="40" />
+              <span class="pts num" data-score="away">0</span>
+              <span class="tos" data-tos="away" aria-label="Timeouts left"><i></i><i></i><i></i></span>
+            </div>
+
+            <div class="middle">
+              <p class="dd" data-down>—</p>
+              <p class="clock">
+                <span class="qtr" data-qtr>Q1</span>
+                <span class="clk num" data-clock>15:00</span>
+              </p>
+            </div>
+
+            <div class="side home" data-side="home">
+              <span class="tos" data-tos="home" aria-label="Timeouts left"><i></i><i></i><i></i></span>
+              <span class="pts num" data-score="home">0</span>
+              <img class="mark" src={u(`/logos/${game.home}.png`)} alt={home.name} width="40" height="40" />
+              <span class="edge" style={`background:${home.color}`} aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="strip-wrap">
+        <canvas data-strip role="slider" tabindex="0"
+                aria-label="Play position" aria-valuemin="1" aria-valuemax={frames.length}
+                aria-valuenow="1"></canvas>
+      </div>
+
+      <footer class="transport">
+        <div class="buttons">
+          {/* Each pair is one glyph and its own mirror, rather than the two
+              characters the alphabet offers for the two directions: those are
+              not true mirrors of each other in any font, and the left one came
+              out a pixel and a half wider than the right. */}
+          <button type="button" data-first aria-label="First play"><span class="ico end flip">⏭</span></button>
+          <button type="button" data-prev aria-label="Previous play"><span class="ico flip">▶︎</span></button>
+          <button class="play" type="button" data-play aria-label="Play">▶</button>
+          <button type="button" data-next aria-label="Next play"><span class="ico">▶︎</span></button>
+          <button type="button" data-last aria-label="Last play"><span class="ico end">⏭</span></button>
+        </div>
+        <div class="speeds" role="group" aria-label="Speed">
+          <button type="button" data-speed="0.5">½×</button>
+          <button type="button" data-speed="1" aria-pressed="true">1×</button>
+          <button type="button" data-speed="2">2×</button>
+        </div>
+        <p class="count"><span data-index>1</span> / {frames.length}</p>
+      </footer>
+
+    </div>
+  </dialog>
+</div>
+
+<!-- The replay's data, inlined. `is:inline` because this is not a script to
+     bundle: it is the payload the bundled one reads. -->
+<script is:inline type="application/json" data-replay-payload set:html={JSON.stringify(payload)} />
+
+<script>
+  import { mountReplay } from '@lib/replay';
+  mountReplay();
+</script>
+
+<style>
+  /* ── The way in ────────────────────────────────────────────────────────── */
+  /* One line above the strip: what is in the game on the left, the way into
+     it on the right. The key sits hard right whether or not the note beside
+     it has had to wrap onto its own line. */
+  .cue {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 10px 18px; margin-bottom: 10px;
+  }
+  .cue-note { margin: 0; font-size: var(--ks-type-small-size); color: var(--ks-text-muted); }
+
+  .open {
+    flex: none; margin-left: auto;
+    display: inline-flex; align-items: center;
+    height: var(--ks-control-md); padding: 0 18px;
+    background: var(--ks-instrument); color: var(--ks-instrument-text);
+    border: 0; border-radius: var(--ks-radius-pill);
+    cursor: pointer;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    box-shadow: var(--ks-lift-1);
+    transition: box-shadow var(--ks-settle) var(--ks-ease);
+  }
+  .open:hover { box-shadow: var(--ks-lift-2); }
+  .open:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 3px; }
+
+  /* The finished strip. `.instrument` already carries the ground and the
+     corner; this adds the lift and clips the canvas to it. The height is its
+     own now that there is no block above it to match. */
+  .still {
+    height: 102px; box-shadow: var(--ks-lift-1); overflow: hidden;
+    /* The replay draws these same two greens on a near-black ground. Measured
+       on the page, this strip and the replay's were rgb(31,38,31) and
+       rgb(17,27,17) to the pixel — identical — and still did not look it: the
+       same dark green against white paper reads as grey where against black it
+       reads as grass. So the picture of the field is given back the lightness
+       and the chroma its surround takes off it, to look like the thing it is a
+       picture of rather than to match it in a colour picker. */
+    --nfl-turf:     oklch(32% 0.030 145);
+    --nfl-turf-end: oklch(26% 0.038 145);
+  }
+  .still canvas { display: block; width: 100%; height: 100%; }
+
+  .market { margin: 10px 0 0; font-size: var(--ks-type-small-size); color: var(--ks-text-muted); }
+
+  /* ── The stage ─────────────────────────────────────────────────────────── */
+  .stage {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    margin: 0; padding: 0; border: 0;
+    background: var(--ks-instrument-deep);
+    color: var(--ks-instrument-text);
+  }
+  .stage::backdrop { background: oklch(8% 0 0 / 0.86); }
+  .stage-inner {
+    position: relative;
+    display: grid;
+    /* Field, then the bug beneath it, as a broadcast has it, then the strip
+       and the keys. Everything that was words rather than picture has come out
+       of here over time — the play description, the three numbers, the note,
+       the statement of limits — and the field has had the height back each
+       time, which is the only thing on this screen that wants it. */
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+    height: 100%;
+    /* Named, because the close button is positioned against this panel's
+       padding box and has to put the same inset back by hand to stand where
+       everything else in the panel stands. */
+    --pad: clamp(10px, 1.4vw, 18px);
+    padding: var(--pad);
+    gap: clamp(5px, 0.7vw, 9px);
+  }
+
+  /* ── Scorebug ──────────────────────────────────────────────────────────
+     A broadcast bug, set in the site's own type rather than a television's:
+     the flair is the team colour carrying the abbreviation and the weight of
+     the numbers, not gloss or a gradient. The only things set large are the
+     two a viewer actually looks at — the score and the down. */
+  /* The units used to be named either side of the bug. They are on the field
+     now, and animated there, so saying it twice was just saying it twice. */
+  .bug-row { display: flex; justify-content: center; }
+
+  /* The toast and the bug are one object, stacked, so the two always meet
+     whatever either of them is. */
+  .bug-stack {
+    position: relative; justify-self: center;
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  .bug {
+    position: relative; z-index: 1;
+    display: flex; align-items: stretch;
+    background: var(--ks-instrument);
+    border: 1px solid var(--ks-instrument-rule);
+    border-radius: var(--ks-radius-sm);
+    overflow: hidden;
+    font-variant-numeric: var(--f1-numeric);
+    box-shadow: var(--ks-lift-1);
+  }
+
+  /* These three min-widths are what a broadcast bug needs to look like one:
+     the two sides even, the middle wide enough for "3rd & 10". Held as clamps
+     rather than fixed, because fixed they were a 634px floor under the whole
+     dialog — a phone got the field, the strip and the keys all cropped so the
+     bug could keep its shape. */
+  .side { display: flex; align-items: center; gap: clamp(6px, 1.3vw, 14px); min-width: clamp(92px, 21vw, 216px); }
+  .side.home { flex-direction: row; justify-content: flex-end; }
+
+  /* The club's mark on the bug's own dark ground, not inside the colour panel.
+     Two thirds of the league reads either way; the navy marks — New England,
+     Seattle — disappear on navy, and broadcast only gets away with it by using
+     gradients and alternate logos. A slim bar of team colour stays as the
+     identity edge, so the bug still has a side to it when two clubs share a
+     primary. */
+  .edge { width: 6px; align-self: stretch; }
+  .mark {
+    width: clamp(32px, 3.4vw, 44px); height: auto;
+    margin-inline: clamp(10px, 1.2vw, 16px);
+    display: block;
+  }
+
+  .pts {
+    font-family: var(--ks-font-display), sans-serif;
+    font-size: clamp(1.9rem, 3.2vw, 2.7rem); font-weight: 200; line-height: 1;
+    color: var(--ks-instrument-muted);
+    min-width: 1.5ch; text-align: center;
+  }
+  .side.lead .pts { color: var(--ks-instrument-text); }
+  .side.away .tos { margin-right: clamp(7px, 1.4vw, 16px); }
+  .side.home .tos { margin-left: clamp(7px, 1.4vw, 16px); }
+
+  /* Timeouts left, as the three marks a broadcast uses. */
+  .tos { display: flex; flex-direction: column; gap: 3px; }
+  .tos i { display: block; width: 14px; height: 2px; background: var(--ks-instrument-text); }
+  .tos i.spent { background: oklch(100% 0 0 / 0.16); }
+
+  .middle {
+    display: flex; flex-direction: column; align-items: stretch;
+    border-inline: 1px solid var(--ks-instrument-rule);
+    min-width: clamp(104px, 23vw, 200px);
+  }
+  /* Down and distance in the possessing team's colour: it is the one field on
+     the bug that belongs to a side rather than to the game. */
+  .dd {
+    margin: 0; padding: 6px clamp(9px, 2vw, 20px) 5px;
+    background: var(--ks-instrument-raised);
+    text-align: center; white-space: nowrap;
+    font-size: var(--ks-type-title-size); font-weight: 600; letter-spacing: 0.02em;
+    color: var(--ks-instrument-text);
+  }
+  .clock {
+    margin: 0; padding: 7px clamp(9px, 2vw, 20px);
+    display: flex; align-items: baseline; justify-content: center; gap: 11px;
+  }
+  .qtr { font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.14em; color: var(--ks-instrument-muted); }
+  .clk { font-size: var(--ks-type-subhead-size); font-weight: 300; }
+
+  /* ── Toast ─────────────────────────────────────────────────────────────── */
+  /* The mask the toast comes out of. It sits directly on the bug's top edge
+     and is exactly as tall as the toast, so a toast parked one height down is
+     clipped away entirely — which is what makes it look like it was behind the
+     bug rather than merely faded out. The toast is wider than the bug, so
+     without this its ends would show either side while it was meant to be
+     hidden.
+
+     It stands in the flow rather than floating above the bug. Floating, it
+     took no height of its own and so was drawn over the bottom of the field —
+     across the direction rule under the line of scrimmage, which is the one
+     thing down there worth reading. In the flow it takes the height it needs
+     and the field hands back the space the play description used to occupy
+     before the play moved onto the toast. The toast is always in the document,
+     parked or not, so that height never changes and nothing shifts between
+     plays. */
+  .toast-slot {
+    overflow: hidden;
+    border-radius: var(--ks-radius-sm) var(--ks-radius-sm) 0 0;
+  }
+
+  .toast {
+    display: block;
+    margin: 0; padding: 6px 18px 7px;
+    background: var(--ks-instrument-raised);
+    border: 1px solid var(--ks-instrument-rule);
+    border-bottom: 0;
+    border-radius: var(--ks-radius-sm) var(--ks-radius-sm) 0 0;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ks-instrument-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: min(92vw, 760px);
+    /* Pinned to the tallest thing that can go in it. The name at the front is
+       set at the lead size, larger than the toast's own type, so the line box
+       was as tall as whatever happened to be on it — and now that the slot
+       holds real height, that made the field a different size on a play with a
+       name from one without. One line at the lead size, always. */
+    --toast-name: var(--ks-type-lead-size);
+    line-height: calc(var(--toast-name) * var(--ks-type-body-line));
+    /* Parked one full height down, inside the mask, so it is not drawn at all
+       until it slides up. */
+    transform: translateY(100%);
+    transition: transform var(--ks-settle) var(--ks-ease);
+  }
+  .toast.on { transform: translateY(0); }
+  /* Every toast is exactly one line tall, whatever is on it — including
+     nothing. Now that the slot stands in the flow, a toast with nothing to say
+     would otherwise collapse it, and the field, which takes whatever is left,
+     would grow into the gap and shrink again the moment there was something to
+     say: the whole field moving on every play.
+     A zero-width space at the lead size holds the line open. It is set at that
+     size rather than the toast's own because the name at the front is, and a
+     line box is the union of what sits on it: this gives an empty toast the
+     same two baselines a full one has. */
+  .toast::before { content: '\200B'; font-size: var(--toast-name); }
+
+  .toast :global(.lead) { font-size: var(--toast-name); color: var(--ks-kinpaku); font-weight: 600; }
+  .toast :global(.sep) { color: var(--ks-instrument-muted); padding-inline: 8px; }
+  .toast :global(.dim) { color: var(--ks-instrument-muted); }
+
+  /* Floated out of the grid: as a row of its own it was taking height from
+     the field, which is the only thing on this screen that wants it. */
+  /* An absolutely positioned child is placed against the padding box, not the
+     content box, so top/right of nothing put it hard into the corner with the
+     panel's own padding on the outside of it. Set to that same padding, it
+     lines up with the strip and the keys below. */
+  .close {
+    position: absolute; top: var(--pad); right: var(--pad); z-index: 3;
+    background: var(--ks-instrument-deep); color: var(--ks-instrument-muted);
+    border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-pill);
+    padding: 6px 16px; cursor: pointer;
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .close:hover { color: var(--ks-instrument-text); border-color: var(--ks-instrument-text); }
+
+  /* ── Field ─────────────────────────────────────────────────────────────── */
+  .field-wrap { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .field-wrap canvas { display: block; max-width: 100%; max-height: 100%; }
+
+  /* ── The card ──────────────────────────────────────────────────────────
+     Pizzazz, within the house style: no gloss and no gradient, but the card
+     arrives — it rises, scales up from just under full size, and its rule of
+     team colour wipes in from the top. The word itself is set in the display
+     face at the size the field will carry.
+
+     Five things earn one. A flag and a turnover are set in the colour this
+     site keeps for what has gone wrong or changed hands; a score and a first
+     down are gold, the same gold the line to gain is drawn in, so the card and
+     the line on the field agree with each other; an incompletion is neither, so
+     it is plain ink — it is the absence of a play, not a good or a bad one. */
+  .flag {
+    position: absolute; inset: 0; z-index: 4;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    background: oklch(10% 0 0 / 0);
+    transition: background var(--ks-settle) var(--ks-ease);
+  }
+  .flag[aria-hidden='true'] .flag-card { opacity: 0; transform: translateY(14px) scale(0.94); }
+  .flag[aria-hidden='true'] { background: oklch(10% 0 0 / 0); }
+  .flag[aria-hidden='false'] { background: oklch(10% 0 0 / 0.55); }
+
+  .flag-card {
+    position: relative;
+    min-width: min(480px, 82vw);
+    padding: clamp(18px, 2.4vw, 30px) clamp(22px, 3vw, 38px) clamp(20px, 2.4vw, 28px);
+    background: var(--ks-instrument);
+    border: 1px solid var(--ks-instrument-rule);
+    border-radius: var(--ks-radius-md);
+    box-shadow: var(--ks-lift-2);
+    text-align: center;
+    opacity: 1; transform: translateY(0) scale(1);
+    transition: opacity var(--ks-settle) var(--ks-ease),
+                transform var(--ks-settle) var(--ks-ease);
+  }
+  /* A rule of the offending club's colour across the top, wiping in. */
+  .flag-edge {
+    position: absolute; left: 0; right: 0; top: 0; height: 5px;
+    border-radius: var(--ks-radius-md) var(--ks-radius-md) 0 0;
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform var(--ks-settle) var(--ks-ease) 0.08s;
+  }
+  .flag[aria-hidden='false'] .flag-edge { transform: scaleX(1); }
+
+  .flag-mark { display: block; margin: 0 auto 10px; width: clamp(44px, 4.4vw, 64px); height: auto; }
+  .flag-title {
+    margin: 0;
+    font-family: var(--ks-font-display), sans-serif;
+    font-size: clamp(2.8rem, 6vw, 4.6rem); font-weight: 200; line-height: 0.95;
+    letter-spacing: 0.02em; text-transform: uppercase;
+    color: var(--nfl-turnover);
+  }
+  .flag[data-tone='gain'] .flag-title { color: var(--ks-kinpaku); }
+  .flag[data-tone='flat'] .flag-title { color: var(--ks-instrument-text); }
+  .flag-kind {
+    margin: 10px 0 0;
+    font-size: var(--ks-type-subhead-size); font-weight: 500;
+    color: var(--ks-instrument-text);
+  }
+  .flag-meta {
+    margin: 7px 0 0;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: var(--ks-type-eyebrow-track); text-transform: uppercase;
+    color: var(--ks-instrument-muted);
+  }
+  /* The pause, running out. It is the beat's own clock, so the card never
+     leaves before the line under it has finished. */
+  .flag-timer {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+    background: var(--nfl-turnover);
+    transform-origin: left center; transform: scaleX(0);
+    border-radius: 0 0 0 var(--ks-radius-md);
+  }
+  .flag[data-tone='gain'] .flag-timer { background: var(--ks-kinpaku); }
+  .flag[data-tone='flat'] .flag-timer { background: var(--ks-instrument-muted); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flag, .flag-card, .flag-edge { transition: none; }
+  }
+
+  /* ── Caption ───────────────────────────────────────────────────────────── */
+  /* The play itself is on the toast now. What is left here is the note about a
+     ball that was placed rather than carried, and the three numbers. */
+  /* ── Strip ─────────────────────────────────────────────────────────────── */
+  /* All of the growth is margin: the two club names and the possession line
+     beside each of them sit outside the goal lines, and the field between them
+     is the same forty-eight pixels it always was. */
+  /* Fixed at 84 this ate a fifth of a landscape phone. It keeps its height
+     where there is height to keep it in. */
+  .strip-wrap { height: clamp(56px, 11vh, 84px); }
+  .strip-wrap canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
+  .strip-wrap canvas:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 2px; }
+
+  /* ── Transport ─────────────────────────────────────────────────────────── */
+  .transport { display: flex; align-items: center; gap: clamp(12px, 2vw, 28px); flex-wrap: wrap; }
+
+  /* Two segmented controls rather than two handfuls of loose keys. Each group
+     is one object with one edge round it and hairlines between its keys, which
+     is both sharper to look at and truer: the five transport keys do one job
+     between them and so do the three speeds. The keys themselves carry no fill
+     until they are wanted — a row of filled slabs was the loudest thing on a
+     screen whose subject is a field. */
+  .buttons, .speeds {
+    display: flex;
+    background: var(--ks-instrument);
+    border: 1px solid var(--ks-instrument-rule);
+    border-radius: var(--ks-radius-sm);
+    overflow: hidden;
+  }
+  .transport button {
+    background: transparent; color: var(--ks-instrument-muted);
+    border: 0; border-left: 1px solid var(--ks-instrument-rule);
+    min-width: var(--ks-control-md); height: var(--ks-control-md);
+    padding: 0 12px; cursor: pointer;
+    font-size: var(--ks-type-ui-size); line-height: 1;
+    font-variant-numeric: var(--f1-numeric);
+    transition: background var(--ks-quick) var(--ks-ease),
+                color var(--ks-quick) var(--ks-ease);
+  }
+  .transport button:first-child { border-left: 0; }
+  .transport button:hover { background: var(--ks-instrument-raised); color: var(--ks-instrument-text); }
+  .transport button:focus-visible {
+    outline: 1px solid var(--ks-kinpaku); outline-offset: -1px; color: var(--ks-instrument-text);
+  }
+  /* The keys that move by one play or jump to an end are marks on the way to
+     the key that runs the thing, so they are set smaller than it.
+
+     The two sizes are not a mistake. A step key is a triangle on its own; a
+     jump key is a triangle and a bar sharing the same glyph, so at one size the
+     triangle in it comes out a little over half the height of the other's. They
+     are set by how tall each one actually draws rather than by the size asked
+     for. */
+  .transport .ico { display: inline-block; font-size: 0.7rem; line-height: 1; }
+  .transport .end { font-size: 1.22rem; }
+  .transport .flip { transform: scaleX(-1); }
+  /* No padding on the keys that hold a mark, so the mark's size cannot decide
+     the key's: they are all the one width, whatever is drawn in them. */
+  .buttons button { padding: 0; }
+  /* The one key that is not like the others, and the only fill in the row. */
+  .transport .play {
+    min-width: var(--ks-control-lg); font-size: 0.95rem;
+    background: var(--ks-instrument-text); color: var(--ks-instrument-deep);
+  }
+  .transport .play:hover { background: #fff; color: var(--ks-instrument-deep); }
+  /* A speed that is on is a lit key, not an outlined one. */
+  .speeds button[aria-pressed='true'] { background: var(--ks-instrument-raised); color: var(--ks-instrument-text); }
+  /* Held to the far end of the row. It used to be pushed there by the read-out
+     that sat between; with that gone it has to hold its own ground. */
+  .count {
+    margin: 0 0 0 auto; padding-left: clamp(4px, 1vw, 14px);
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.1em;
+    color: var(--ks-instrument-muted); font-variant-numeric: var(--f1-numeric);
+  }
+
+  @media (max-width: 720px) {
+    .bug { max-width: 100%; }
+  }
+
+  /* A landscape phone gives this dialog 390px of height, and the furniture was
+     taking 68% of it — the bug alone stood 134px tall, exactly as it does on a
+     1440x900 desktop, which left the field 125. Everything here is the same
+     object drawn smaller, nothing is dropped: a scoreboard with a piece
+     missing is worse than a small one. */
+  /* Standing up, the field is as wide as the screen and its own proportions
+     then fix its height — so there is slack the field cannot use, about 300px
+     of it on a phone. Centred, the field floated in the middle of that with
+     the bug a long way beneath it. Sat at the bottom of its row it meets the
+     bug, and the slack becomes one quiet margin under the close key rather
+     than two gaps inside the picture. */
+  @media (max-aspect-ratio: 4 / 5) {
+    .field-wrap { align-items: flex-end; }
+    .dd { font-size: var(--ks-type-ui-size); }
+  }
+
+  @media (max-height: 560px) {
+    .toast { --toast-name: 0.92rem; padding: 2px 14px 3px; }
+    .mark { width: clamp(24px, 3vw, 30px); margin-inline: clamp(7px, 1vw, 10px); }
+    .pts { font-size: clamp(1.3rem, 3vw, 1.7rem); }
+    .dd { padding: 3px clamp(8px, 1.6vw, 14px); font-size: var(--ks-type-ui-size); }
+    .clock { padding: 3px clamp(8px, 1.6vw, 14px); gap: 8px; }
+    .clk { font-size: var(--ks-type-ui-size); }
+    .side { gap: clamp(5px, 1vw, 10px); min-width: clamp(80px, 18vw, 150px); }
+    .middle { min-width: clamp(92px, 20vw, 150px); }
+  }
+</style>

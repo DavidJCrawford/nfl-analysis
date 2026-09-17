@@ -1,13 +1,230 @@
 ---
+/** The front door: the season as cards, a week to a block, newest week at the
+ *  top.
+ *
+ *  This is /, not /games/. A reader arriving at a site about a season wants the
+ *  games, and there is no sense in a front page that points at the page they
+ *  actually came for.
+ *
+ *  Descending, so the week a reader wants is the one they land on: the week
+ *  being played now, not the one played in September. Only the first two are
+ *  laid out here for now — the rest follow, and the order holds. The
+ *  crests are the 96px set under /logos/sm/, not the 500px originals: every
+ *  club plays in both weeks, so this page holds all thirty-two of them, and the
+ *  originals would be 1.7MB of PNG to draw something 48px across.
+ */
 import Base from '@layouts/Base.astro';
+import { getSchedule, getWeeks, getTeams, getRecords } from '@lib/data';
+import { dateRange, shortDate, record } from '@lib/format';
+import { gameUrl, u } from '@lib/url';
+
+const schedule = getSchedule();
+const teams = getTeams();
+// slice() copies, so reversing it leaves the cached week list alone.
+const weeks = getWeeks().slice(0, 2).reverse();
+
+/** The top of each division, as it actually stands.
+ *
+ *  Every club on the top line is shown rather than one of them chosen. One week
+ *  in that matters: seven of the eight divisions have two, three or four clubs
+ *  level at the top, and the NFC South has all four level at 0–1, where leading
+ *  and not leading are the same thing. The NFL's own tiebreakers — head to
+ *  head, division record, common games, strength of victory — need more than
+ *  the schedule carries, so a single leader here would be one this site had
+ *  invented by sorting, and a club would be top of its division because of its
+ *  initials. */
+const records = getRecords();
+const divisions = [...new Set(Object.values(teams).map((t) => t.div))].sort();
+const leaders = divisions.map((div) => {
+  const clubs = Object.keys(teams).filter((a) => teams[a]!.div === div);
+  const rank = (a: string) => {
+    const r = records.get(a)!;
+    return r.w * 2 + r.t;           // a tie is half a win, as the league counts it
+  };
+  const best = Math.max(...clubs.map(rank));
+  const top = clubs.filter((a) => rank(a) === best).sort();
+  return { div, top, rec: records.get(top[0]!)!, level: top.length === clubs.length };
+});
+
+/** The weekday, short. Sundays used to be left blank on the grounds that a
+ *  Thursday or a Monday then stood out without labelling the other fourteen —
+ *  but a card with only a time on it does not say it is a Sunday, it says
+ *  nothing, and the reader has to know the convention to read it. A played card
+ *  gives its day; so does this one now. */
+const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
 ---
-<Base title="The season">
-  <div class="wrap section">
-    <p class="eyebrow">Season 2026</p>
-    <h1 class="headline" style="margin-top:.2em">NFL Analysis</h1>
-    <p class="lead measure" style="margin-top:1em">
-      Scaffolded, not yet built. The schedule tree and the game replay are the
-      first two things to make — see <code>Docs/HANDOFF.md</code>.
-    </p>
+
+<Base title="The season" description={`Every game of the ${schedule.season} NFL season, week by week, and each one played back down the field.`}>
+  <div class="wrap section intro">
+    <p class="eyebrow">Season {schedule.season}</p>
+    <h1 class="headline" style="margin-top:.2em">Games</h1>
+  </div>
+
+  <div class="wrap">
+    <section class="leaders" aria-label="Top of each division">
+      {leaders.map((d) => (
+        <div class="stand">
+          <p class="dname">{d.div}</p>
+          <p class="crests">
+            {d.top.map((a) => (
+              <a class="plain crest-link" href={u(`/teams/${a}/`)}>
+                <img src={u(`/logos/sm/${a}.webp`)} alt={teams[a]!.nick} width="48" height="48" />
+              </a>
+            ))}
+          </p>
+          <p class="drec num">
+            {record(d.rec)}
+            {/* Said plainly, because four crests at 0–1 is not a standing. */}
+            {d.level && <span class="level"> · all level</span>}
+          </p>
+        </div>
+      ))}
+    </section>
+  </div>
+
+  <div class="wrap board">
+    {weeks.map((w) => (
+      <section class="week">
+        <header class="week-head">
+          <h2 class="wk">Week {w.week}</h2>
+          <p class="when">{dateRange(w.first, w.last)}</p>
+        </header>
+
+        <div class="cards">
+          {w.games.map((g) => (
+            <a class:list={['card', { ahead: !g.played }]} href={gameUrl(g.id)}>
+              <span class="side">
+                {/* Decorative: the club's name is the next thing along. */}
+                <img class="crest" src={u(`/logos/sm/${g.away}.webp`)} alt="" width="48" height="48" />
+                <span class:list={['club', { won: g.played && (g.margin ?? 0) < 0 }]}>{teams[g.away]!.nick}</span>
+                {g.played && <span class="pts num">{g.away_score}</span>}
+              </span>
+              <span class="side">
+                <img class="crest" src={u(`/logos/sm/${g.home}.webp`)} alt="" width="48" height="48" />
+                <span class:list={['club', { won: g.played && (g.margin ?? 0) > 0 }]}>{teams[g.home]!.nick}</span>
+                {g.played && <span class="pts num">{g.home_score}</span>}
+              </span>
+              <span class="foot">
+                {/* A played game is placed by when it happened; one still to
+                    come, by when it starts. "Final" was the same word on every
+                    played card — true, standard on a scoreboard, and carrying
+                    nothing here, where a finished game is the only kind there
+                    is in the block. */}
+                {g.played
+                  ? <>{g.weekday.slice(0, 3)} {shortDate(g.date)}{g.ot ? <> · OT</> : null}</>
+                  : <>{dayOf(g.weekday)}{g.kickoff} ET</>}
+                {g.div && <span class="div">Div</span>}
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+  </div>
+
+  {/* Where credits live: at the foot of the front page rather than in the
+      masthead, which is where the sibling F1 site puts them. */}
+  <div class="wrap colophon">
+    <hr class="rule" />
+    <p class="ui muted">Built from data published by others — <a href={u('/credits/')}>sources and terms</a>.</p>
   </div>
 </Base>
+
+<style>
+  /* The band belongs to the heading above it and not to the weeks below, so it
+     sits close under one and well clear of the other. The section's own 72px
+     had it the other way about. */
+  .intro { padding-bottom: clamp(18px, 2.6vw, 34px); }
+  .colophon { padding-bottom: clamp(32px, 4vw, 56px); }
+  .colophon p { margin: 18px 0 0; }
+
+  .board { padding-top: clamp(40px, 5.6vw, 76px); padding-bottom: clamp(40px, 5vw, 72px); }
+
+  /* The top of every division on one line, under the heading. */
+  .leaders {
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: clamp(8px, 1.4vw, 22px);
+    padding: clamp(16px, 2vw, 22px) 0;
+    border-top: 1px solid var(--ks-rule); border-bottom: 1px solid var(--ks-rule);
+  }
+  .stand { min-width: 0; }
+  .dname {
+    margin: 0; font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: var(--ks-type-eyebrow-track); text-transform: uppercase;
+    color: var(--ks-text-muted); white-space: nowrap;
+  }
+  .crests { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0; }
+  .crest-link { border: 0; line-height: 0; }
+  .crests img {
+    width: 26px; height: 26px;
+    transition: transform var(--ks-quick) var(--ks-ease);
+  }
+  .crest-link:hover img { transform: translateY(-2px); }
+  .crest-link:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 2px; border-radius: 2px; }
+  .drec {
+    margin: 8px 0 0; font-size: var(--ks-type-ui-size); color: var(--ks-ink);
+    font-variant-numeric: var(--f1-numeric);
+  }
+  .level { color: var(--ks-text-muted); font-variant-numeric: normal; }
+
+  @media (max-width: 1100px) { .leaders { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: clamp(16px, 2vw, 24px); } }
+  @media (max-width: 560px)  { .leaders { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .week + .week { margin-top: clamp(38px, 4.5vw, 64px); }
+  .week-head {
+    display: flex; align-items: baseline; gap: 14px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--ks-rule);
+  }
+  .wk { font-size: var(--ks-type-title-size); font-weight: 600; color: var(--ks-ink); letter-spacing: 0.02em; }
+  .when { margin: 0 0 0 auto; font-size: var(--ks-type-ui-size); color: var(--ks-text-muted); }
+
+  /* Four to a row, so a sixteen-game week lands as a four by four block. Held
+     rather than auto-filled: auto-fill gave five columns on a wide screen and
+     left the last row of a week with one card in it. Stepped down by hand
+     below the width four cards can be read at. */
+  .cards {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(10px, 1.2vw, 16px);
+    margin-top: clamp(16px, 2vw, 24px);
+  }
+  @media (max-width: 1040px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 800px)  { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px)  { .cards { grid-template-columns: minmax(0, 1fr); } }
+
+  .card {
+    display: grid; gap: 7px;
+    padding: 14px 16px 12px;
+    border: 1px solid var(--ks-rule); border-radius: var(--ks-radius-md);
+    background: var(--ks-paper-raised);
+    transition: border-color var(--ks-quick) var(--ks-ease), box-shadow var(--ks-settle) var(--ks-ease);
+  }
+  .card:hover { border-color: var(--ks-edge); box-shadow: var(--ks-lift-1); }
+  .card:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 2px; }
+
+  .side { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; }
+  .crest { width: 24px; height: 24px; }
+  .club { font-size: var(--ks-type-ui-size); color: var(--ks-text-muted); }
+  .club.won { color: var(--ks-ink); font-weight: 600; }
+  .pts { font-size: var(--ks-type-small-size); color: var(--ks-text-muted); font-variant-numeric: var(--f1-numeric); }
+  .club.won + .pts { color: var(--ks-ink); font-weight: 600; }
+
+  .foot {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 3px; padding-top: 9px; border-top: 1px solid var(--ks-rule);
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: var(--ks-type-eyebrow-track); text-transform: uppercase;
+    color: var(--ks-text-muted);
+    font-variant-numeric: var(--f1-numeric);
+  }
+  .div {
+    margin-left: auto; padding: 1px 6px;
+    border: 1px solid var(--ks-rule); border-radius: var(--ks-radius-pill);
+    font-size: 0.9em; color: var(--ks-text-mute-deep);
+  }
+
+  /* A game that has not been played yet: the crests go to grey, so a block of
+     them reads as still to come without a word saying so. */
+  .card.ahead .crest { filter: grayscale(1); opacity: 0.45; }
+  .card.ahead:hover .crest { filter: grayscale(0.55); opacity: 0.75; }
+  .card.ahead .club { color: var(--ks-text); }
+</style>

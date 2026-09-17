@@ -1,0 +1,110 @@
+---
+/**
+ * Passing, rushing and receiving, by team.
+ *
+ * Short lines are dropped: a game produces a long tail of one-carry and
+ * zero-yard entries that say nothing and bury the ones that do. The threshold
+ * is stated on the page rather than hidden here, because a reader who counts
+ * the carries and finds them short deserves to know why.
+ */
+import type { Game } from '@lib/types';
+
+interface Props { game: Game; }
+const { game } = Astro.props;
+
+const sides = [game.away, game.home];
+const forTeam = <T extends { team: string }>(rows: T[], team: string): T[] =>
+  rows.filter((r) => r.team === team);
+---
+
+<div class="lines">
+  {sides.map((team) => (
+    <section class="side">
+      <h3 class="title">{team}</h3>
+
+      <table>
+        <caption class="cap">Passing</caption>
+        <thead>
+          <tr><th scope="col">Player</th><th scope="col" class="n">C/A</th><th scope="col" class="n">Yds</th><th scope="col" class="n">TD</th><th scope="col" class="n">Int</th><th scope="col" class="n">Sk</th></tr>
+        </thead>
+        <tbody>
+          {forTeam(game.players.passing, team).map((p) => (
+            <tr>
+              <th scope="row">{p.name}</th>
+              <td class="n">{p.cmp}/{p.att}</td>
+              <td class="n">{p.yards}</td>
+              <td class="n">{p.td}</td>
+              <td class="n">{p.int}</td>
+              <td class="n">{p.sacks}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <table>
+        <caption class="cap">Rushing</caption>
+        <thead>
+          <tr><th scope="col">Player</th><th scope="col" class="n">Att</th><th scope="col" class="n">Yds</th><th scope="col" class="n">Avg</th><th scope="col" class="n">TD</th></tr>
+        </thead>
+        <tbody>
+          {forTeam(game.players.rushing, team).filter((p) => p.att >= 2).map((p) => (
+            <tr>
+              <th scope="row">{p.name}</th>
+              <td class="n">{p.att}</td>
+              <td class="n">{p.yards}</td>
+              <td class="n">{(p.yards / p.att).toFixed(1)}</td>
+              <td class="n">{p.td}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <table>
+        <caption class="cap">Receiving</caption>
+        <thead>
+          <tr><th scope="col">Player</th><th scope="col" class="n">Rec</th><th scope="col" class="n">Tgt</th><th scope="col" class="n">Yds</th><th scope="col" class="n">TD</th></tr>
+        </thead>
+        <tbody>
+          {forTeam(game.players.receiving, team).filter((p) => p.rec >= 1).map((p) => (
+            <tr>
+              <th scope="row">{p.name}</th>
+              <td class="n">{p.rec}</td>
+              <td class="n">{p.tgt}</td>
+              <td class="n">{p.yards}</td>
+              <td class="n">{p.td}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))}
+</div>
+
+<style>
+  .lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(24px, 4vw, 56px); }
+  /* The same club label as the box score above, rather than the 1.06rem
+     .title it used to be: the same word, twice on one screen, at two sizes. */
+  .side .title {
+    padding-bottom: 7px; border-bottom: 1px solid var(--ks-edge);
+    font-size: var(--ks-type-ui-size); font-weight: 600; letter-spacing: 0.06em;
+    color: var(--ks-ink);
+  }
+  /* Columns of numbers, lining up the way the box score's do. */
+  .side table {
+    margin-top: 20px; font-size: var(--ks-type-ui-size);
+    font-variant-numeric: var(--f1-numeric);
+  }
+  /* Passing, Rushing, Receiving head the columns beneath them, so they are set
+     a step above them: same size and tracking, heavier and darker. They were
+     lighter than the column heads they govern, which read as upside down. */
+  .cap {
+    text-align: left; margin-bottom: 6px;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ks-text);
+  }
+  .side th[scope='row'] { font-weight: 400; color: var(--ks-text); }
+  .side td.n { color: var(--ks-ink); }
+</style>

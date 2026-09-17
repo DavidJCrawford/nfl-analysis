@@ -1,0 +1,182 @@
+---
+/**
+ * The whole game, drive by drive, in words.
+ *
+ * Each drive opens closed; the summary line is the drive, and opening it gives
+ * the plays. That keeps a 170-play game on one page without hiding anything:
+ * `<details>` is findable by the browser's own in-page search in every current
+ * browser, so a reader looking for a name will still land on it.
+ *
+ * The one thing this shows that no other view does is the re-spot: where the
+ * ball was put down somewhere other than where the last play ended, and why.
+ * See the `mark_respots` pass in pipeline/emit.py.
+ */
+import type { Game, Teams } from '@lib/types';
+import { clock, signed } from '@lib/format';
+
+interface Props { game: Game; teams: Teams; }
+const { game, teams } = Astro.props;
+
+const DOWN = ['', '1st', '2nd', '3rd', '4th'];
+
+/** Where the ball is, said the way a broadcast says it: the side of the field
+ *  and the yard line, not the internal coordinate. */
+const spot = (x: number): string => {
+  if (Math.abs(x - 50) < 0.01) return 'the 50';
+  const side = x < 50 ? game.home : game.away;
+  const yard = x < 50 ? x : 100 - x;
+  return `${side} ${Math.round(yard)}`;
+};
+
+/** See the note in DriveChart: the last drive of a finished game is labelled
+ *  "End of half" upstream. */
+const lastDrive = game.drives.length - 1;
+const resultOf = (result: string, k: number): string =>
+  k === lastDrive && result === 'End of half' ? 'End of game' : result;
+
+/** The replay counts only plays, so the log's own index would be off by every
+ *  timeout and quarter end. One map, built once, keeps the two in step. */
+const replayIndex = new Map<number, number>();
+game.plays.forEach((p) => {
+  if (p.kind === 'play') replayIndex.set(p.id, replayIndex.size + 1);
+});
+
+const RESPOT: Record<string, string> = {
+  penalty: 'Re-spotted by penalty',
+  loose: 'Loose ball — the recovery is described but not tracked',
+  change: 'Possession changed',
+};
+---
+
+<div class="log">
+  {game.drives.map((d, k) => {
+    const span = game.plays.slice(d.from, d.to);
+    return (
+      <details class="drive">
+        <summary>
+          <span class="n num">{d.n}</span>
+          <span class="who">
+            <span class="spine" style={`background:${teams[d.pos]?.color ?? 'var(--ks-ink)'}`} aria-hidden="true"></span>
+            {d.pos}
+          </span>
+          <span class="span">{d.start ?? '—'} → {d.end ?? '—'}</span>
+          <span class="result">{resultOf(d.result, k)}</span>
+          <span class="tally num">{d.plays ?? '—'} plays, {d.yards ?? '—'} yards, {d.top ?? '—'}</span>
+        </summary>
+
+        <ol class="plays">
+          {span.map((p) => (
+            p.kind === 'note' ? (
+              <li class="note">
+                <span class="mark num">Q{p.q} {clock(p.clock)}</span>
+                <span class="body">{p.desc}</span>
+              </li>
+            ) : (
+              <li class="play">
+                <span class="mark num">Q{p.q} {clock(p.clock)}</span>
+                <span class="body">
+                  {p.respot && (
+                    <span class="respot">
+                      {RESPOT[p.respot.why ?? ''] ?? 'Ball moved'} — {spot(p.respot.from)} to {spot(p.x0)}
+                    </span>
+                  )}
+                  <span class="situation num">
+                    {p.down ? `${DOWN[p.down]} and ${p.goal ? 'goal' : p.togo}` : p.type === 'kickoff' ? 'Kickoff' : 'Conversion'}
+                    <span class="at"> at {spot(p.x0)}</span>
+                  </span>
+                  <span class="desc">{p.desc}</span>
+                  <a class="plain watch" href={`#play-${replayIndex.get(p.id)}`}>Watch this play</a>
+                  <span class="meta">
+                    {p.gain !== undefined && p.type !== 'kickoff' && (
+                      <span class="gain num">{signed(p.gain)} yd</span>
+                    )}
+                    {p.epa !== null && <span class="epa num">EPA {signed(p.epa, 2)}</span>}
+                    {(p.tags ?? []).map((t) => <span class="tag">{t}</span>)}
+                  </span>
+                </span>
+              </li>
+            )
+          ))}
+        </ol>
+      </details>
+    );
+  })}
+</div>
+
+<style>
+  .log { border-top: 1px solid var(--ks-edge); }
+  .drive { border-bottom: 1px solid var(--ks-rule); }
+
+  summary {
+    display: grid;
+    grid-template-columns: 26px 46px minmax(140px, 1fr) 132px auto;
+    gap: 10px; align-items: baseline;
+    padding: 9px 0;
+    cursor: pointer;
+    font-size: var(--ks-type-ui-size);
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary:hover { background: var(--ks-paper-deep); }
+  summary:focus-visible { outline: 2px solid var(--ks-patina-deep); outline-offset: 2px; }
+
+  .n { text-align: right; color: var(--ks-text-mute-deep); font-size: var(--ks-type-eyebrow-size); }
+  .who { position: relative; padding-left: 8px; font-weight: 600; color: var(--ks-ink); }
+  .spine { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 2px; }
+  .span { color: var(--ks-text-muted); }
+  .result { color: var(--ks-ink); }
+  .tally { color: var(--ks-text-mute-deep); font-size: var(--ks-type-eyebrow-size); text-align: right; }
+
+  .plays { list-style: none; margin: 0; padding: 0 0 14px 0; }
+  .plays li {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 14px;
+    padding: 7px 0 7px 82px;
+    border-top: 1px solid var(--ks-rule);
+  }
+  .mark { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); padding-top: 2px; }
+  /* A play description is prose and obeys a measure. Left to the full width of
+     a 1320px page it runs to 160 characters and stops being readable. */
+  .body { min-width: 0; max-width: 78ch; }
+  .situation { display: block; font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ks-text-muted); }
+  .situation .at { text-transform: none; letter-spacing: 0.02em; }
+  .desc { display: block; font-size: var(--ks-type-small-size); color: var(--ks-text); margin-top: 2px; }
+
+  /* The static page and the replay are one thing, not two: every play here is
+     a link into the replay at that play. */
+  .watch {
+    display: inline-block; margin-top: 3px;
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ks-text-mute-deep);
+    border-bottom: 1px solid transparent;
+  }
+  .play:hover .watch { color: var(--ks-kinpaku-deep); border-bottom-color: currentColor; }
+  .watch:focus-visible { color: var(--ks-kinpaku-deep); }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; font-size: var(--ks-type-eyebrow-size); }
+  .gain { color: var(--ks-ink); }
+  .epa { color: var(--ks-text-mute-deep); }
+  .tag {
+    color: var(--ks-text-muted);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* The ball did not travel here — it was put here. Saying so is the whole
+     point of recording the re-spot in the first place. */
+  .respot {
+    display: block;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: 0.04em;
+    color: var(--ks-kinpaku-deep);
+    margin-bottom: 3px;
+  }
+
+  .note .body { font-size: var(--ks-type-ui-size); color: var(--ks-text-mute-deep); letter-spacing: 0.04em; }
+
+  @media (max-width: 860px) {
+    summary { grid-template-columns: 22px 40px 1fr; }
+    summary .span, summary .tally { display: none; }
+    .plays li { padding-left: 0; grid-template-columns: 62px 1fr; gap: 8px; }
+  }
+</style>

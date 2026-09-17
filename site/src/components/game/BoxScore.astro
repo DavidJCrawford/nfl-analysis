@@ -1,0 +1,123 @@
+---
+/**
+ * Team totals, side by side.
+ *
+ * Every number here was summed from the plays by pipeline/emit.py rather than
+ * taken from a summary feed, so each one can be traced back to the rows that
+ * produced it. The layout puts the away team on the left, as the scoreboard
+ * and the game id both do.
+ */
+import type { Game } from '@lib/types';
+
+interface Props { game: Game; }
+const { game } = Astro.props;
+
+const away = game.box[game.away]!;
+const home = game.box[game.home]!;
+
+const ratio = (made: number, att: number) => (att ? `${made}/${att}` : '—');
+
+interface Line {
+  label: string; a: string; h: string; lead?: boolean;
+}
+
+const lines: Line[] = [
+  { label: 'First downs', a: String(away.first_downs), h: String(home.first_downs), lead: true },
+  { label: '— rushing', a: String(away.first_rush), h: String(home.first_rush) },
+  { label: '— passing', a: String(away.first_pass), h: String(home.first_pass) },
+  { label: '— by penalty', a: String(away.first_pen), h: String(home.first_pen) },
+  { label: 'Total net yards', a: String(away.yards), h: String(home.yards), lead: true },
+  { label: 'Plays from scrimmage', a: String(away.plays), h: String(home.plays) },
+  { label: 'Rushing yards', a: String(away.rush_yards), h: String(home.rush_yards), lead: true },
+  { label: 'Rushing attempts', a: String(away.rush_att), h: String(home.rush_att) },
+  { label: 'Passing yards', a: String(away.pass_yards), h: String(home.pass_yards), lead: true },
+  { label: 'Completions / attempts', a: ratio(away.completions, away.pass_att), h: ratio(home.completions, home.pass_att) },
+  { label: 'Sacked — yards lost', a: `${away.sacks}–${away.sack_yards}`, h: `${home.sacks}–${home.sack_yards}` },
+  { label: 'Third down', a: ratio(away.third_made, away.third_att), h: ratio(home.third_made, home.third_att), lead: true },
+  { label: 'Fourth down', a: ratio(away.fourth_made, away.fourth_att), h: ratio(home.fourth_made, home.fourth_att) },
+  { label: 'Turnovers', a: String(away.turnovers), h: String(home.turnovers), lead: true },
+  { label: '— interceptions', a: String(away.interceptions), h: String(home.interceptions) },
+  { label: '— fumbles lost', a: String(away.fumbles_lost), h: String(home.fumbles_lost) },
+  { label: 'Penalties — yards', a: `${away.penalties}–${away.penalty_yards}`, h: `${home.penalties}–${home.penalty_yards}`, lead: true },
+  { label: 'Time of possession', a: away.top_text, h: home.top_text, lead: true },
+];
+
+/** Which side of a row is the larger number, for the hairline that marks it.
+ *  Only on the lead rows: marking every sub-total would turn the table into a
+ *  scoreboard of eighteen little contests, which is not what it is. */
+const bigger = (l: Line): 'a' | 'h' | null => {
+  if (!l.lead) return null;
+  const a = Number(l.a.replace(/[^\d.-]/g, ''));
+  const h = Number(l.h.replace(/[^\d.-]/g, ''));
+  if (!Number.isFinite(a) || !Number.isFinite(h) || a === h) return null;
+  return a > h ? 'a' : 'h';
+};
+---
+
+<table class="box">
+  <caption class="visually-hidden">Team totals</caption>
+  <thead>
+    <tr>
+      <th scope="col" class="n away">{game.away}</th>
+      <th scope="col" class="what"><span class="visually-hidden">Statistic</span></th>
+      <th scope="col" class="n home">{game.home}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {lines.map((l) => (
+      <tr class:list={[{ lead: l.lead }]}>
+        <td class:list={['n', { top: bigger(l) === 'a' }]}>{l.a}</td>
+        <th scope="row" class="what">{l.label}</th>
+        <td class:list={['n', { top: bigger(l) === 'h' }]}>{l.h}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+<style>
+  .box { table-layout: fixed; font-variant-numeric: var(--f1-numeric); }
+  /* The site's own row rhythm, without the horizontal padding: this table is
+     three fixed columns and the middle one is centred, so a right pad would
+     shift the label off the middle of the block. */
+  .box th, .box td { padding: 7px 0; border-bottom: 1px solid var(--ks-rule); }
+
+  /* A club's abbreviation, set the same here as it is over the player lines
+     below — the two sit within a screen of each other and name the same
+     thing, so they should not be two different labels. */
+  thead th {
+    font-size: var(--ks-type-ui-size);
+    letter-spacing: 0.06em;
+    color: var(--ks-ink);
+    font-weight: 600;
+    border-bottom-color: var(--ks-edge);
+    text-transform: none;
+  }
+  thead th.away { text-align: left; }
+  thead th.home { text-align: right; }
+
+
+  .what {
+    text-align: center;
+    font-weight: 400;
+    color: var(--ks-text-muted);
+    font-size: var(--ks-type-small-size);
+    width: 46%;
+  }
+  td.n { font-size: var(--ks-type-title-size); color: var(--ks-text-muted); width: 27%; }
+  td.n:first-child { text-align: left; }
+  td.n:last-child { text-align: right; }
+
+  /* A total and its sub-lines are one group. With the bars gone the only thing
+     separating one group from the next was type, so a little air above each
+     total does the work a rule would have done more loudly. */
+  tr.lead th, tr.lead td { padding-top: 13px; }
+
+  /* Sub-lines are subordinate to the total above them, and read that way. */
+  tr:not(.lead) .what { color: var(--ks-text-mute-deep); font-size: var(--ks-type-ui-size); }
+  tr:not(.lead) td.n { font-size: var(--ks-type-ui-size); }
+  tr.lead td.n { color: var(--ks-ink); }
+  tr.lead .what { color: var(--ks-text); }
+
+  /* The larger of the two, on the rows where larger means something. */
+  td.n.top { font-weight: 600; }
+</style>

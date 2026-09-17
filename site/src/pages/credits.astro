@@ -1,0 +1,113 @@
+---
+/** Sources and terms. Attribution is a condition of the licence, not a
+ *  courtesy — SPEC §3 — and this page is where the condition is met. */
+import Base from '@layouts/Base.astro';
+import { getSchedule } from '@lib/data';
+
+const schedule = getSchedule();
+const { source } = schedule;
+---
+
+<Base title="Credits" description="Where the data comes from, and the terms it is used under.">
+  <div class="wrap section">
+    <p class="eyebrow">Sources and terms</p>
+    <h1 class="headline" style="margin-top:.2em">Credits</h1>
+
+    <div class="prose measure">
+      <h2 class="title">The data</h2>
+      <p>
+        Everything on this site comes from
+        <a href={source.url} rel="noopener">{source.name}</a>, which publishes NFL schedules,
+        play-by-play and team information as GitHub release assets and refreshes them nightly
+        during the season. It is used under <strong>{source.licence}</strong>, which requires
+        attribution; this page is that attribution.
+      </p>
+      <p>
+        Three datasets are in use: <code>schedules</code> for the {schedule.counts.games}-game
+        schedule, <code>pbp</code> for the play-by-play behind every game page and replay, and
+        <code>teams</code> for names, divisions and colours. nflverse in turn builds its
+        play-by-play on the NFL's own published game feeds.
+      </p>
+
+      <h2 class="title">The club marks</h2>
+      <p>
+        The team logos — beside a club's name on its own page and on a game page,
+        on the replay's scoreboard and in its end zones — are the clubs' own, and
+        the shield in the masthead is the league's. A page loads only the marks of
+        the clubs it is about. They are
+        <strong>trademarks of the individual clubs</strong> and are not covered by the licence
+        above — {source.name} publishes the addresses of these images as part of its data, but it
+        does not own the marks and cannot license them. They are reproduced here for the one
+        purpose of identifying which team is which.
+      </p>
+      <p>
+        This site is unofficial and unaffiliated. It is not associated with the National Football
+        League or with any club, and nothing on it is endorsed by them.
+      </p>
+
+      <h2 class="title">What is not here</h2>
+      <p>
+        There is no public player tracking for this season. The NFL's Next Gen Stats tracking —
+        twenty-two players at 10 Hz — is released only for specific historical weeks through the
+        Big Data Bowl, under competition terms that do not permit redistribution, and it does not
+        exist for 2026 at all.
+      </p>
+      <p>
+        So the replay shows the ball, the chains and the drive, and says so on its own face. It
+        does not show routes, coverage or where anybody was standing, and nothing on this site is
+        drawn as though it could.
+      </p>
+
+      <h2 class="title">How to read it</h2>
+      <ul>
+        <li>
+          <strong>Kickoff times are US Eastern</strong>, as nflverse publishes them, and are not
+          converted. Dates are rendered from the stored date and never parsed through a local
+          timezone, which is how a schedule quietly loses a day.
+        </li>
+        <li>
+          <strong>Point spreads are home-relative.</strong> A spread of 3 means the home team
+          favoured by three. They are only published about two weeks ahead of kickoff, so most of
+          the season has none.
+        </li>
+        <li>
+          <strong>EPA is a model</strong>, not an observation. It comes from nflverse, is
+          shown as a number against each play in the log, and is never a certainty. Win
+          probability is published alongside it and is deliberately not shown here.
+        </li>
+        <li>
+          <strong>A gap is shown as a gap.</strong> Where the ball was placed rather than carried —
+          a penalty, a loose ball, a change of possession — the replay marks it and says why.
+          Where the data has no answer, the page says that instead of guessing.
+        </li>
+      </ul>
+
+      <h2 class="title">The build</h2>
+      <p>
+        The site is static. A pipeline turns the nflverse CSVs into canonical JSON, a verifier
+        checks that JSON against facts it did not produce — the published final scores, the
+        league's own drive summaries, and the point values football allows — and the build fails
+        if any of them disagree. The emitted data is committed alongside the code, so the site can
+        be rebuilt from the repository alone.
+      </p>
+      <p class="small muted">
+        Design and build inherit from a sibling project,
+        <a href="https://github.com/DavidJCrawford/f1-analysis" rel="noopener">F1 Analysis</a>.
+      </p>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .prose { --flow: 1rem; }
+  .prose .title { margin-top: 2.2em; }
+  .prose .title:first-child { margin-top: 1.4em; }
+  .prose p { margin: 0.8em 0 0; color: var(--ks-text); }
+  .prose ul { margin: 0.8em 0 0; padding-left: 20px; }
+  .prose li { margin-top: 0.6em; }
+  .prose code {
+    font-family: var(--ks-mono), monospace;
+    font-size: 0.85em; letter-spacing: 0.04em;
+    background: var(--ks-paper-deep); padding: 1px 5px; border-radius: var(--ks-radius-sm);
+  }
+</style>

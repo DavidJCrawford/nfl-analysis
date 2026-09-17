@@ -1,0 +1,86 @@
+---
+/** Thirty-two teams, in the order everyone already has in their head:
+ *  conference, then division, then record. */
+import Base from '@layouts/Base.astro';
+import { getRecords, getTeamOrder, getTeams, getGames } from '@lib/data';
+import { record } from '@lib/format';
+import { u } from '@lib/url';
+
+const teams = getTeams();
+const order = getTeamOrder();
+const records = getRecords();
+const games = getGames();
+
+/** Points for and against, from the games actually played. */
+const points = new Map<string, { for: number; against: number; played: number }>();
+for (const abbr of order) points.set(abbr, { for: 0, against: 0, played: 0 });
+for (const g of games) {
+  if (!g.played) continue;
+  const h = points.get(g.home)!, a = points.get(g.away)!;
+  h.for += g.home_score!; h.against += g.away_score!; h.played += 1;
+  a.for += g.away_score!; a.against += g.home_score!; a.played += 1;
+}
+
+/** Grouped into the eight divisions, in `order`'s order. */
+const divisions: { name: string; teams: string[] }[] = [];
+for (const abbr of order) {
+  const div = teams[abbr]!.div;
+  const last = divisions[divisions.length - 1];
+  if (last && last.name === div) last.teams.push(abbr);
+  else divisions.push({ name: div, teams: [abbr] });
+}
+---
+
+<Base title="Teams" description="All 32 NFL teams, their division and their season so far.">
+  <div class="wrap section">
+    <p class="eyebrow">Season 2026</p>
+    <h1 class="headline" style="margin-top:.2em">Teams</h1>
+  </div>
+
+  <div class="wrap" style="padding-bottom:clamp(40px,5vw,72px)">
+    <div class="divisions">
+      {divisions.map((d) => (
+        <section class="division">
+          <h2 class="title">{d.name}</h2>
+          <ol>
+            {d.teams.map((abbr) => {
+              const t = teams[abbr]!;
+              const p = points.get(abbr)!;
+              return (
+                <li>
+                  <a class="plain row" href={u(`/teams/${abbr}/`)}>
+                    <span class="spine" style={`background:${t.color}`} aria-hidden="true"></span>
+                    <span class="nick">{t.nick}</span>
+                    <span class="rec num">{record(records.get(abbr)!)}</span>
+                    <span class="pts num">{p.played ? `${p.for}–${p.against}` : '—'}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ))}
+    </div>
+  </div>
+</Base>
+
+<style>
+  .divisions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: clamp(24px, 3vw, 46px);
+  }
+  .division .title { padding-bottom: 6px; border-bottom: 1px solid var(--ks-edge); letter-spacing: 0.04em; }
+  .division ol { list-style: none; margin: 0; padding: 0; }
+  .row {
+    position: relative;
+    display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline;
+    padding: 8px 0 8px 10px; border: 0; border-bottom: 1px solid var(--ks-rule);
+    font-size: var(--ks-type-ui-size);
+  }
+  .row:hover { background: var(--ks-paper-deep); }
+  .spine { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; }
+  .nick { color: var(--ks-ink); font-weight: 500; }
+  .rec { color: var(--ks-text); }
+  .pts { color: var(--ks-text-mute-deep); font-size: var(--ks-type-eyebrow-size); min-width: 52px; text-align: right; }
+</style>

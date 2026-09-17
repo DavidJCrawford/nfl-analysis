@@ -19,6 +19,13 @@ export default defineConfig({
   site: 'https://davidjcrawford.github.io',
   base,
   trailingSlash: 'always',
+  /* Astro's HTML compression deletes a newline between running text and an
+     inline element outright, rather than collapsing it to the space HTML says
+     it is — so "comes from\n<a>nflverse-data</a>" was published as "comes
+     fromnflverse-data". The bug is invisible in the source and only appears in
+     the build, which is no way to run a site that is mostly prose. Keeping the
+     whitespace costs 33K gzipped across all 308 pages, around 107 bytes each. */
+  compressHTML: false,
   build: { format: 'directory' },
   prefetch: { prefetchAll: true, defaultStrategy: 'hover' },
   devToolbar: { enabled: false },

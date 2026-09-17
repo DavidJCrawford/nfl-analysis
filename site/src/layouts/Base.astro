@@ -7,7 +7,6 @@ interface Props { title: string; description?: string; }
 const { title, description = 'The NFL season, game by game — one permanent page each.' } = Astro.props;
 
 const NAV = [
-  { href: '/games/', label: 'Games' },
   { href: '/teams/', label: 'Teams' },
 ];
 const path = Astro.url.pathname;
@@ -29,7 +28,13 @@ const path = Astro.url.pathname;
 
     <header class="masthead">
       <div class="wrap masthead-inner">
-        <a class="wordmark plain" href={u('/')}>NFL Analysis</a>
+        <a class="wordmark plain" href={u('/')}>
+          {/* Decorative: the words beside it say the same thing. Cropped to
+              its ink and cut to 64px on the long edge — 2.4KB against the
+              500px original's 18. */}
+          <img class="shield" src={u('/nfl.webp')} alt="" width="47" height="64" />
+          <span>NFL Analysis</span>
+        </a>
         <nav aria-label="Sections">
           {NAV.map((item) => (
             <a class="plain nav-link" href={u(item.href)}
@@ -55,6 +60,27 @@ const path = Astro.url.pathname;
   .masthead-inner {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 24px; padding-block: 20px; flex-wrap: wrap;
+  }
+  /* Baseline, not centre, and the mark opted out of it. The masthead row
+     aligns its two halves on their baselines, and a flex box takes its
+     baseline from its first baseline-aligned item — which was the image, whose
+     baseline is its bottom edge. So the mark was dragging the row's baseline
+     down with it, and the masthead grew by a pixel as the mark grew. With the
+     words supplying the baseline and the mark centred against them, the row is
+     the same height whatever size the mark is. */
+  .wordmark { display: inline-flex; align-items: baseline; gap: 0.42em; }
+  /* The shield carries its own lettering, so it needs height to be anything
+     at all — at the cap height of the words beside it the NFL inside was four
+     pixels tall and simply a smudge.
+     What the row cares about is not how tall the mark is drawn but how tall
+     its margin box is: anything up to the 33px line box it sits in is free.
+     So it is drawn at 36 and given back four, which leaves 32 for the layout
+     and lets the other four fall into the 20px of padding the masthead has
+     above and below — space that was doing nothing. In em throughout, so the
+     whole arrangement follows the wordmark if that ever changes. */
+  .shield {
+    height: 1.8em; width: auto; flex: none; align-self: center;
+    margin-block: -0.1em;
   }
   .wordmark {
     font-size: var(--ks-type-subhead-size);
