@@ -6,8 +6,9 @@ been played replayed down the field, play by play.
 Sibling to [F1 Analysis](https://github.com/DavidJCrawford/f1-analysis), whose
 design system and build shape it inherits.
 
-**Status: built and working.** The schedule, every game page and the replay are
-in. Start with [`Docs/HANDOFF.md`](Docs/HANDOFF.md).
+**Status: built and working.** The schedule, every game page, the replay, and a
+page for every player and club are in. Start with
+[`Docs/HANDOFF.md`](Docs/HANDOFF.md).
 
 ```bash
 make week      # the weekly refresh: fetch + emit + verify + build, and a report
@@ -27,7 +28,8 @@ human eye. `--strict` makes those stop the run rather than just report.
 | --- | --- |
 | `/` | a card per game, a block per week, newest first, over the top of every division |
 | `/games/2026/1/NE-SEA/` | one game: the replay, every play, the totals |
-| `/teams/` · `/teams/SEA/` | 32 teams, and one team's season |
+| `/teams/` · `/teams/SEA/` | 32 clubs; one club's season, squad and totals for and against |
+| `/players/` · `/players/00-0033873/` | the league's leaders and every name; one player's life, season and games |
 | `/credits/` | sources and terms |
 
 There is no `/games/` index: the front page is that list. A game page lives at a
@@ -38,15 +40,22 @@ Two checks run on every build and both fail it. `pipeline/verify.py` re-reads th
 emitted JSON and tests it against things it did not produce — the published final
 scores, the league's own drive summaries, the point values football allows, and
 whether the ball ever teleports. `pipeline/check_site.py` follows every internal
-link in the built site.
+link in the built site — 38,663 of them across 2,051 pages.
 
 ## Data
 
 Everything from [nflverse](https://github.com/nflverse/nflverse-data), CC BY 4.0,
-refreshed nightly during the season. 272 games, 18 weeks, **372 fields per play**
-— field position, down, distance, yards gained, clock, drive, EPA, win
-probability. The site draws the first several; it shows EPA against each play in
-the log and deliberately shows no win probability at all.
+refreshed nightly during the season. Nine datasets: 272 games, 18 weeks,
+**372 fields per play** — field position, down, distance, yards gained, clock,
+drive, EPA, win probability — plus rosters, player and club statistics by week
+and by season, and snap counts. The site draws the first several; it shows EPA
+against each play in the log and deliberately shows no win probability at all.
+
+Player numbers are nflverse's own totals, not sums worked out here. They could
+have been derived from the plays, but a receiving yard would then mean whatever
+this pipeline decided it meant. What the pipeline does instead is check the two
+against each other, club by club and game by game — which is how it found that
+it had been counting every sack as a pass attempt.
 
 There is no public player tracking for the current season, so the replay shows
 the ball, the chains and the drive rather than 22 moving players. See

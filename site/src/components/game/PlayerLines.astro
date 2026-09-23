@@ -8,6 +8,8 @@
  * the carries and finds them short deserves to know why.
  */
 import type { Game } from '@lib/types';
+import { getPlayerIndex } from '@lib/data';
+import { u } from '@lib/url';
 
 interface Props { game: Game; }
 const { game } = Astro.props;
@@ -15,6 +17,14 @@ const { game } = Astro.props;
 const sides = [game.away, game.home];
 const forTeam = <T extends { team: string }>(rows: T[], team: string): T[] =>
   rows.filter((r) => r.team === team);
+
+/** A box-score name links to the player, where there is a player to link to.
+ *  Checked against the index rather than assumed: a line with an id for
+ *  somebody the site has no page for would otherwise be a dead link, and it is
+ *  the link checker that would find it rather than this. */
+const known = getPlayerIndex().players;
+const href = (id: string | null | undefined): string | null =>
+  id && known[id] ? u(`/players/${id}/`) : null;
 ---
 
 <div class="lines">
@@ -30,7 +40,7 @@ const forTeam = <T extends { team: string }>(rows: T[], team: string): T[] =>
         <tbody>
           {forTeam(game.players.passing, team).map((p) => (
             <tr>
-              <th scope="row">{p.name}</th>
+              <th scope="row">{href(p.id) ? <a href={href(p.id)}>{p.name}</a> : p.name}</th>
               <td class="n">{p.cmp}/{p.att}</td>
               <td class="n">{p.yards}</td>
               <td class="n">{p.td}</td>
@@ -49,7 +59,7 @@ const forTeam = <T extends { team: string }>(rows: T[], team: string): T[] =>
         <tbody>
           {forTeam(game.players.rushing, team).filter((p) => p.att >= 2).map((p) => (
             <tr>
-              <th scope="row">{p.name}</th>
+              <th scope="row">{href(p.id) ? <a href={href(p.id)}>{p.name}</a> : p.name}</th>
               <td class="n">{p.att}</td>
               <td class="n">{p.yards}</td>
               <td class="n">{(p.yards / p.att).toFixed(1)}</td>
@@ -67,7 +77,7 @@ const forTeam = <T extends { team: string }>(rows: T[], team: string): T[] =>
         <tbody>
           {forTeam(game.players.receiving, team).filter((p) => p.rec >= 1).map((p) => (
             <tr>
-              <th scope="row">{p.name}</th>
+              <th scope="row">{href(p.id) ? <a href={href(p.id)}>{p.name}</a> : p.name}</th>
               <td class="n">{p.rec}</td>
               <td class="n">{p.tgt}</td>
               <td class="n">{p.yards}</td>

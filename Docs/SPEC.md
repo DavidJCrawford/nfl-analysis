@@ -47,7 +47,7 @@ page. Stadium, roof and surface are properties of a game, not subjects.
 Scope is a single switch, as in F1 — `site/src/lib/scope.ts` — so widening to
 past seasons later is one line. nflverse carries play-by-play back to 1999.
 
-## 3. Data — verified 2026-09-16
+## 3. Data — verified 2026-09-16, extended 2026-09-24
 
 Everything comes from **[nflverse](https://github.com/nflverse/nflverse-data)**,
 published as GitHub release assets and **refreshed nightly during the season**.
@@ -58,12 +58,43 @@ pain the F1 project was built around.
 | --- | --- | --- | --- |
 | `schedules` / `games.csv` | CC BY 4.0 | 272 games, kickoff times, scores, stadium, roof, surface, rest days, betting lines. 46 fields | **yes**, updated daily |
 | `pbp` / `play_by_play_2026.csv` | CC BY 4.0 | **372 fields per play.** Field position, down, distance, yards gained, clock, drive, series, play type, description, EPA, win probability, players involved | **yes**, updated nightly |
-| `ftn_charting` | CC BY 4.0 | Manual per-play charting — play action, pocket, screens | **yes** |
+| `ftn_charting` | CC BY 4.0 | Manual per-play charting — play action, pocket, screens | **yes**, unused |
+| `rosters` / `roster_2026.csv` | CC BY 4.0 | 2,988 roster rows: club, position, jersey, status, birth date, height, weight, college, draft pick, experience, headshot URL | **yes** |
+| `stats_player` | CC BY 4.0 | **150 fields per player per game**, and the same by season: passing, rushing, receiving, defence, kicking, punting, returns, penalties, EPA | **yes** |
+| `stats_team` | CC BY 4.0 | 138 fields per club per game and by season | **yes** |
+| `snap_counts` | CC BY 4.0 | Offensive, defensive and special-teams snaps per player per game — the only source that counts the offensive line | **yes** |
+| `injuries` | CC BY 4.0 | Weekly report status | **yes**, 36.5% populated, unused |
+| `depth_charts` | CC BY 4.0 | Per-week depth charts | **yes**, 52 MB / 554k rows, unused |
 | `nextgen_stats` | CC BY 4.0 | Aggregated speed/separation metrics | **not yet for 2026** |
 | `pbp_participation` | CC BY 4.0 | Personnel on field per play | **not yet for 2026** |
 
 Attribution is a licence condition, not courtesy. A credits page carries it, as
 in F1.
+
+**Who gets a player page: active rosters ∪ everyone who has played.** 1,743
+people. The union is not tidiness. 1,693 are on an active roster and 1,306 have
+recorded a statistic, but fifty-one of those have since gone to a practice
+squad or injured reserve — and their names are in game pages that are already
+published. Restricting to active rosters would leave those names pointing at
+nothing, and the count only rises as the season injures people. 437 pages carry
+a biography and no statistics, which is what a squad looks like: most of one
+does not play on any given Sunday.
+
+**The numbers are nflverse's, not this pipeline's.** Every one of them is
+derivable from the play-by-play, but derived here a receiving yard would mean
+whatever this pipeline decided it meant rather than what it means everywhere
+else. What the pipeline does instead is check the two against each other — it
+builds a box score by walking the plays, sums nflverse's per-player rows per
+club, and compares. That is how it found it had been counting every sack as a
+pass attempt; see HANDOFF §3.
+
+**Photographs are people's, and the league's.** The roster gives a headshot URL
+per player. Like the club marks, these are outside the CC BY 4.0 licence:
+nflverse publishes the addresses, not the images, and cannot license what it
+does not own. They are cached at 96px square, shown to identify which player is
+which, and the credits page says so plainly. Nine players have none published
+and get their initials — a silhouette would say "person unknown" where what is
+true is "photograph not published".
 
 ### 3.1 What the replay can and cannot show
 
@@ -97,9 +128,25 @@ a passing chart, and the site should not imply otherwise.
                         week first, over a band showing the top of every division
 /games/2026/1/NE-SEA/   One game: the replay, every play, the totals
 /teams/                 Index
-/teams/SEA/             Team page — schedule, results, form
+/teams/SEA/             One club: what it has done for and against, its season
+                        week by week, and its squad
+/players/               The league's leaders, then every name
+/players/00-0033873/    One player: his life, his season, his games
 /credits/               Sources and terms
 ```
+
+A player page is reached from a box score, from a squad, from a leaderboard and
+from the directory — every one of the 847 box-score lines in a published game
+links to one. That is the point of the union rule in §3: a page exists for
+everyone who has played as well as everyone currently on a roster, so no name
+already in print points at nothing.
+
+`/players/` could not copy the sibling F1 site's driver index. That is one
+table of twenty. This is 1,743 people, and the same design would be a phone
+book carrying 3 MB of portraits. It splits instead by what a reader came for:
+leaders at the top with faces, short; every name below, no images, left to the
+site search. A club's full squad lives on the club's page, where a squad is a
+squad rather than a slice of an alphabet.
 
 There is no `/games/` index. There was, and the front page pointed at it; a front
 page whose job is to point at the page the reader came for is a front page doing

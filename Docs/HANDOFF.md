@@ -1,8 +1,9 @@
 # HANDOFF — NFL Analysis
 
 Rewritten 2026-09-16 at the end of the session that built the site; revised
-2026-09-17 after the session that reworked the pages. Read [SPEC.md](SPEC.md)
-first; this says what is done, what is verified, and what will bite you.
+2026-09-17 after the session that reworked the pages, and 2026-09-24 after the
+one that added people. Read [SPEC.md](SPEC.md) first; this says what is done,
+what is verified, and what will bite you.
 
 The previous version of this file described a scaffold. Everything it said to
 build is built. §5 is the part to read whatever else you skip.
@@ -12,21 +13,35 @@ build is built. §5 is the part to read whatever else you skip.
 ## 1. What exists
 
 ```
-Makefile                      fetch / emit / verify / build / links / preview
+Makefile                      fetch / emit / verify / week / build / links
 pipeline/fetch.py             nflverse release assets -> .cache/nflverse
 pipeline/emit.py              CSV -> canonical JSON in site/data/
 pipeline/verify.py            checks the JSON against facts it did not produce
+pipeline/update.py            the weekly refresh, as one command — §6
 pipeline/check_site.py        follows every internal link in the built site
-site/data/                    committed: schedule.json, teams.json, games/*.json
+site/data/                    committed: schedule.json, teams.json,
+                              team-stats.json, players.json,
+                              games/*.json (32), players/*.json (1,743)
 site/src/lib/                 data.ts, game.ts, types.ts, format.ts, url.ts,
-                              scope.ts, replay.ts
+                              scope.ts, stats.ts, replay.ts
 site/src/components/game/     GameReplay, BoxScore, PlayerLines, PlayLog
+site/src/components/people/   Face
 site/src/pages/               index, games/[season]/[week]/[matchup],
-                              teams/, teams/[abbr], credits
-site/public/                  logos/ (32), logos/sm/ (32), nfl.webp
+                              teams/, teams/[abbr], players/, players/[id],
+                              credits
+site/public/                  logos/ (32), logos/sm/ (32), faces/ (1,734),
+                              nfl.webp
 ```
 
-`make data && make build` works and produces 307 pages.
+`make week` works and produces 2,051 pages and 38,663 internal links.
+
+**People were added on 2026-09-24.** Six more nflverse datasets — rosters,
+player and club stats by week and by season, snap counts — and a page for
+everyone on a roster. Who gets a page is the union of the active rosters and
+everyone who has played, which is not tidiness: fifty-one players have appeared
+this season and have since gone to a practice squad or injured reserve, and all
+847 box-score lines in the published game pages link to a player page. Active
+alone would have orphaned some of them, and more every week.
 
 **Six components were deleted on 2026-09-17** and are in the history if wanted:
 `SeasonWeave`, `SeasonGrid`, `SeasonLedger` (the old front page and `/games/`),
@@ -37,17 +52,38 @@ component, sweep for that, and count *in-file* references before you do. Five
 constants in `game.ts` look unused from outside and are reached by `gameLength`
 and `lineScore`.
 
-**Not done:** the push. `origin` is set and holds only the scaffold commit;
-everything since is local. Pushing `main` deploys to GitHub Pages, and that
-workflow has never run.
+**Two positions per player, on purpose.** The roster files everyone under
+eleven coarse positions (QB RB WR TE OL DL LB DB K P LS) and that is what a
+squad list groups by; the club's own depth chart says CB rather than DB and
+that is what gets written down. A third vocabulary exists in the stats files
+and is finer again — grouping by that one dropped 234 defensive linemen into an
+"Elsewhere" bucket, because `DL` is not in it.
 
 ## 2. What is verified, so you need not re-check it
 
-Measured against the live sources on 2026-09-16.
+Measured against the live sources on 2026-09-16, and again on 2026-09-24.
 
 - nflverse publishes as **GitHub release assets**, not an API: release tag plus
-  asset name. Four are fetched: `schedules`, `teams`, `pbp`, `ftn_charting`.
-- **2026 is live and refreshing nightly.** 272 games, 18 weeks, 16 played.
+  asset name. Ten are fetched: `schedules`, `teams`, `pbp`, `ftn_charting`,
+  `rosters`, `stats_player` (week and season), `stats_team` (week and season)
+  and `snap_counts`.
+- **2026 is live and refreshing nightly.** 272 games, 18 weeks, 32 played.
+- **The two aggregations agree.** This pipeline derives a box score by walking
+  the plays; nflverse aggregates the same plays into per-player rows. Summed
+  per club and compared, they match exactly on pass attempts, completions,
+  passing yards, interceptions, sacks taken, rush attempts and rushing yards,
+  over all 64 (game, club) pairs — once the sack bug was fixed. `verify.py`
+  keeps them that way.
+- **Snap counts join at 98.7%, with nothing ambiguous.** They are keyed on Pro
+  Football Reference's player id, not the league's: `pfr_id` covers 80.6% and
+  name-plus-club a further 18.1%, and no (name, club) pair in the roster maps
+  to two people. The 1.3% left are name variants ("Paris Johnson" against
+  "Paris Johnson Jr.") and are reported rather than guessed at.
+- **Headshot URLs are Cloudinary**, so the resizing is asked of the CDN:
+  `f_webp,q_auto,w_96,h_96,c_fill,g_face` gives 96x96 WebP at about 1.8 KB
+  against a published 3400x2450 PNG at 3.7 MB. Twenty-four are served from
+  `/image/private/` rather than `/image/upload/`; matching only the latter
+  leaves those twenty-four untransformed, at 95 MB between them.
 - **The field coordinate works.** `yardline_100` converted to `x` (yards from
   the home team's goal line) agrees with the `yrdln` text on every one of the
   2,569 plays with a position. That check runs on every emit.
@@ -94,7 +130,7 @@ Measured against the live sources on 2026-09-16.
 - **There is no public player tracking for 2026** — SPEC §3.1. This is the hard
   ceiling on the replay and it shaped the replay from the start.
 
-## 3. Four things about the data that cost time to find
+## 3. Five things about the data that cost time to find
 
 **`game_seconds_remaining` is not monotonic.** It counts 3600 down to 0 through
 regulation and then **restarts at 600 for overtime**. Anything on a timeline
@@ -120,6 +156,15 @@ last eleven plays of one game. All three were improvements. None announced
 itself. Assume every refresh can change the past, which is why `update.py`
 diffs the old JSON against the new and reports any already-published game that
 moved — see §6.
+
+**nflverse sets `pass_attempt` on a sack.** It marks a dropback, not an
+official attempt, and no box score the NFL prints counts a sack as a pass
+attempt. Taking the flag at face value inflated every club's attempts by its
+sacks taken and every quarterback's line on every game page — Geno Smith read
+27 of 45 against Green Bay where the official line is 27 of 41. Completions and
+passing yards were never wrong, because a sack is neither. The general lesson
+is that a flag in this data is named for what the feed needs it for, not for
+what a box score means by the same word.
 
 ## 4. Lessons from F1 that applied here, and how
 
@@ -201,14 +246,21 @@ In rough order of value:
    the division band thins as the ties resolve, and the next week's fixtures
    appear. Nothing needs editing. If it reports nothing moved, nothing upstream
    moved.
-2. **Week 5 is the first real test of the bye treatment**, because weeks 1–4
-   have none. The team page leaves the row empty; untested against a week that
-   actually has byes in it. A bye also means a week with fewer than 16 games,
-   which the front page's fixed four-column grid has never seen.
-3. **`ftn_charting` is sitting there unused.** Play action, pocket and screens
+2. **The bye now draws, and the front page has still not met one.** A club
+   page renders its bye week correctly — seen on Kansas City, week 5 — but a
+   bye also means a week with fewer than sixteen games, and the front page's
+   fixed four-column grid has never been given one. The first such week reaches
+   the board when week 4 finishes.
+3. **`ftn_charting` is still unused**, and so are `injuries` and
+   `depth_charts`, which were looked at and left: the injury report is 36.5%
+   populated and the depth-chart file is 52 MB of per-week rows. Play action, pocket and screens
    per play would add a genuine layer to the play log without implying any
    tracking. It is the obvious next feature.
-4. **Past seasons.** `site/src/lib/scope.ts` is one constant. nflverse has
+4. **Nobody has a career.** Every player page is one season, because one
+   season is what is fetched. nflverse has rosters and player stats back to
+   1999 in the same shape, so a career table is mostly a matter of fetching
+   more and deciding what a page does with a man who played for six clubs.
+5. **Past seasons.** `site/src/lib/scope.ts` is one constant. nflverse has
    play-by-play to 1999 and the format is uniform, so this is mostly a matter
    of emitting more and paginating the front page.
 

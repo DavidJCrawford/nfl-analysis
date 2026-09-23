@@ -23,10 +23,23 @@ const { source } = schedule;
         attribution; this page is that attribution.
       </p>
       <p>
-        Three datasets are in use: <code>schedules</code> for the {schedule.counts.games}-game
+        Nine datasets are in use. <code>schedules</code> for the {schedule.counts.games}-game
         schedule, <code>pbp</code> for the play-by-play behind every game page and replay, and
-        <code>teams</code> for names, divisions and colours. nflverse in turn builds its
-        play-by-play on the NFL's own published game feeds.
+        <code>teams</code> for names, divisions and colours. <code>rosters</code> for who plays
+        for whom and for everything on a player page that is not a statistic — the birth date,
+        the college, the height and weight, the draft pick. <code>stats_player</code> and
+        <code>stats_team</code>, by week and by season, for the numbers on those pages, and
+        <code>snap_counts</code> for how much of a game a player was actually on the field.
+        nflverse in turn builds its play-by-play on the NFL's own published game feeds.
+      </p>
+      <p>
+        The statistics on a player's page are nflverse's own totals rather than sums this site
+        worked out for itself. They could have been derived here — every one of them is in the
+        play-by-play — but a receiving yard would then mean whatever this site had decided it
+        meant, instead of what it means everywhere else. What the pipeline does instead is
+        check the two against each other: it builds a box score by walking the plays, then
+        compares that with nflverse's aggregation of the same plays, club by club and game by
+        game. Where they disagree, one of them is wrong.
       </p>
 
       <h2 class="title">The club marks</h2>
@@ -39,6 +52,18 @@ const { source } = schedule;
         above — {source.name} publishes the addresses of these images as part of its data, but it
         does not own the marks and cannot license them. They are reproduced here for the one
         purpose of identifying which team is which.
+      </p>
+      <h2 class="title">The photographs</h2>
+      <p>
+        The portrait on a player's page, and the small ones on a squad list and a leaderboard,
+        are the league's published headshots. {source.name} gives their addresses in its roster
+        data in the same way it gives the addresses of the club marks, and the same limit
+        applies: it does not own these images and cannot license them. They are
+        <strong>photographs of real people, and the league's</strong>. They are used here to show
+        which player is which, at 96 pixels square, cached rather than loaded from somebody
+        else's server, and for no other purpose. Nine players have no published headshot and
+        their initials are shown instead — a silhouette would say "person unknown" where what is
+        true is "photograph not published".
       </p>
       <p>
         This site is unofficial and unaffiliated. It is not associated with the National Football

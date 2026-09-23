@@ -148,9 +148,38 @@ def report(before: dict[str, bytes], strict: bool) -> bool:
         print(f"  {len(new_games)} game(s) newly written: " +
               ", ".join(f"week {int(w)} ×{n}" for w, n in sorted(by_week.items())))
     for g in gone:
-        print(f"  \033[33mremoved: {g}\033[0m")
+        if not g.startswith("players/"):
+            print(f"  \033[33mremoved: {g}\033[0m")
+
+    # Roster churn, which is its own weekly event and nothing to do with the
+    # games. Reported by name, because "17 players left" is not something
+    # anybody can act on and "A.J. Brown is on injured reserve" is.
+    joined = [a for a in added if a.startswith("players/")]
+    left = [g for g in gone if g.startswith("players/")]
+    if joined or left:
+        print(f"\n  squads: {len(joined)} in, {len(left)} out")
+        names = {}
+        if (DATA / "players.json").exists():
+            names = json.loads((DATA / "players.json").read_text("utf-8"))["players"]
+        for f in joined[:8]:
+            pid = pathlib.Path(f).stem
+            p = names.get(pid)
+            print(f"    + {p['name']} ({p['team']}, {p['pos']})" if p else f"    + {pid}")
+        if len(joined) > 8:
+            print(f"    … and {len(joined) - 8} more")
+        for f in left[:8]:
+            old_row = json.loads(before[f])
+            print(f"    - {old_row.get('name', pathlib.Path(f).stem)} ({old_row.get('team')})")
+        if len(left) > 8:
+            print(f"    … and {len(left) - 8} more")
+
+    faces = ROOT / "site" / "public" / "faces"
+    if faces.exists():
+        print(f"  {len(list(faces.glob('*.webp')))} portraits on the site")
 
     # Anything that was already on the site and is not what it was.
+    # Only games. A player file changing is what a week of football looks
+    # like; a published game changing is not.
     republished = [r for r in revised if r.startswith("games/")]
     if republished:
         print(f"\n\033[1;33m⚠ {len(republished)} already-published game(s) revised by nflverse\033[0m")

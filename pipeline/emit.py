@@ -779,7 +779,12 @@ def build_box(rows: list[dict], drives: list[dict], home: str, away: str) -> dic
 def build_players(rows: list[dict]) -> dict[str, list[dict]]:
     """Passing, rushing and receiving lines. Two-point plays are excluded from
     the attempt counts for the same reason the NFL excludes them: they are not
-    scrimmage downs and no box score has ever counted them."""
+    scrimmage downs and no box score has ever counted them.
+
+    Each line carries the player's gsis id as well as his name, so a box score
+    can link to the man rather than just print "G.Smith". The id is what the
+    play-by-play gives for every role it names — passer, rusher, receiver — and
+    it is the same id the roster and the stats files use."""
     passing: dict[tuple, dict] = {}
     rushing: dict[tuple, dict] = {}
     receiving: dict[tuple, dict] = {}
@@ -796,6 +801,7 @@ def build_players(rows: list[dict]) -> dict[str, list[dict]]:
         if (p := s(r, "passer_player_name")) and flag(r, "pass_attempt") and not flag(r, "sack"):
             e = passing.setdefault((pos, p), {"team": pos, "name": p, "att": 0, "cmp": 0,
                                               "yards": 0, "td": 0, "int": 0, "sacks": 0})
+            e.setdefault("id", s(r, "passer_player_id"))
             e["att"] += 1
             e["cmp"] += 1 if flag(r, "complete_pass") else 0
             e["yards"] += i(r, "passing_yards") or 0
@@ -804,11 +810,13 @@ def build_players(rows: list[dict]) -> dict[str, list[dict]]:
         if (p := s(r, "passer_player_name")) and flag(r, "sack"):
             e = passing.setdefault((pos, p), {"team": pos, "name": p, "att": 0, "cmp": 0,
                                               "yards": 0, "td": 0, "int": 0, "sacks": 0})
+            e.setdefault("id", s(r, "passer_player_id"))
             e["sacks"] += 1
 
         if (p := s(r, "rusher_player_name")) and flag(r, "rush_attempt"):
             e = rushing.setdefault((pos, p), {"team": pos, "name": p, "att": 0,
                                               "yards": 0, "td": 0})
+            e.setdefault("id", s(r, "rusher_player_id"))
             e["att"] += 1
             e["yards"] += i(r, "rushing_yards") or 0
             e["td"] += 1 if flag(r, "rush_touchdown") else 0
@@ -816,6 +824,7 @@ def build_players(rows: list[dict]) -> dict[str, list[dict]]:
         if (p := s(r, "receiver_player_name")) and flag(r, "pass_attempt"):
             e = receiving.setdefault((pos, p), {"team": pos, "name": p, "tgt": 0, "rec": 0,
                                                 "yards": 0, "td": 0})
+            e.setdefault("id", s(r, "receiver_player_id"))
             e["tgt"] += 1
             if flag(r, "complete_pass"):
                 e["rec"] += 1

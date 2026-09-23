@@ -179,9 +179,14 @@ export interface BoxSide {
   top: number; top_text: string;
 }
 
-export interface Passing { team: string; name: string; att: number; cmp: number; yards: number; td: number; int: number; sacks: number; }
-export interface Rushing { team: string; name: string; att: number; yards: number; td: number; }
-export interface Receiving { team: string; name: string; tgt: number; rec: number; yards: number; td: number; }
+/** `name` is the league's own abbreviation as it appears in a play description
+ *  ("G.Smith"); `id` is the gsis id, which is what links to the player's page.
+ *  It is optional because the play-by-play can name a role without identifying
+ *  who filled it — though in practice all 847 lines of this season have one. */
+export interface BoxLine { team: string; name: string; id?: string | null; }
+export interface Passing extends BoxLine { att: number; cmp: number; yards: number; td: number; int: number; sacks: number; }
+export interface Rushing extends BoxLine { att: number; yards: number; td: number; }
+export interface Receiving extends BoxLine { tgt: number; rec: number; yards: number; td: number; }
 
 export interface ScoringPlay {
   /** Index into `plays`. */
