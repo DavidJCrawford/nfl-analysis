@@ -94,7 +94,7 @@ Measured against the live sources on 2026-09-16.
 - **There is no public player tracking for 2026** — SPEC §3.1. This is the hard
   ceiling on the replay and it shaped the replay from the start.
 
-## 3. Three things about the data that cost time to find
+## 3. Four things about the data that cost time to find
 
 **`game_seconds_remaining` is not monotonic.** It counts 3600 down to 0 through
 regulation and then **restarts at 600 for overtime**. Anything on a timeline
@@ -111,6 +111,15 @@ is reported as a hole.
 a spread today; 224 have none. Any design that fills the unplayed season with a
 forecast will be blank until December. This killed the first idea for the home
 page, and it was cheaper to find out before drawing it than after.
+
+**nflverse revises games it has already published.** The Week 2 refresh added
+sixteen games and also rewrote three Week 1 games that had been live on the site
+for a week: two play descriptions the league amended after the fact (a replay
+assist, a sideline ruling reversed), and win probability recomputed over the
+last eleven plays of one game. All three were improvements. None announced
+itself. Assume every refresh can change the past, which is why `update.py`
+diffs the old JSON against the new and reports any already-published game that
+moved — see §6.
 
 ## 4. Lessons from F1 that applied here, and how
 
@@ -186,25 +195,20 @@ a bug in the data. Assume that first.
 
 In rough order of value:
 
-1. **Push and watch the first deploy.** `origin` has only the scaffold commit
-   and the Pages workflow has never run. It ignores `Docs/**` and `*.md`, so
-   documentation commits do not rebuild the site.
-2. **Re-run `make data` after each slate of games.** The site fills in by
-   itself: a card's crests come out of grey, its kickoff becomes a score, the
-   fixture pages become reports at the same URLs, and the division band thins
-   from four crests to one as the ties resolve. Watch the byte-identical
-   rebuild — if `git status` is clean after `make emit`, nothing upstream moved.
-3. **The front page shows two weeks.** `getWeeks().slice(0, 2).reverse()` in
-   `site/src/pages/index.astro`. Widening it is the slice; think about what 18
-   blocks of 16 cards does to the page before you do.
-4. **Week 5 is the first real test of the bye treatment**, because weeks 1–4
+1. **Run `make week` after each slate of games.** That is the whole routine —
+   see §6. The site fills in by itself: a card's crests come out of grey, its
+   kickoff becomes a score, the fixture pages become reports at the same URLs,
+   the division band thins as the ties resolve, and the next week's fixtures
+   appear. Nothing needs editing. If it reports nothing moved, nothing upstream
+   moved.
+2. **Week 5 is the first real test of the bye treatment**, because weeks 1–4
    have none. The team page leaves the row empty; untested against a week that
    actually has byes in it. A bye also means a week with fewer than 16 games,
    which the front page's fixed four-column grid has never seen.
-5. **`ftn_charting` is sitting there unused.** Play action, pocket and screens
+3. **`ftn_charting` is sitting there unused.** Play action, pocket and screens
    per play would add a genuine layer to the play log without implying any
    tracking. It is the obvious next feature.
-6. **Past seasons.** `site/src/lib/scope.ts` is one constant. nflverse has
+4. **Past seasons.** `site/src/lib/scope.ts` is one constant. nflverse has
    play-by-play to 1999 and the format is uniform, so this is mostly a matter
    of emitting more and paginating the front page.
 
@@ -219,7 +223,38 @@ Careful of:
   and caption both come from the play's own row, which is post-play. Stepping
   and scrubbing deliberately reveal everything; playback does not.
 
-## 6. Conventions worth keeping
+## 6. The weekly refresh
+
+```bash
+make week                  # fetch, emit, verify, build, check links, report
+make week ARGS=--strict    # …and stop if a published game was rewritten
+make week ARGS=--no-build  # data only, for a quick look mid-slate
+```
+
+`pipeline/update.py`. It runs the four steps that never vary and then reports
+the part that does. Design notes, because they are the reason it can be a script
+at all:
+
+- **It edits no source file.** The front page used to carry a hand-held count of
+  how many weeks to show, which would have forced this script to patch a page's
+  frontmatter by regex. That count is now derived — `index.astro` runs the board
+  down to the first week that is not complete — so the job is data in, pages
+  out, and `update.py` only ever writes to `site/data/`.
+- **First *incomplete* week, not last played.** Keying the board off the last
+  played week would publish next week's fixtures on a Friday, because a
+  Thursday-night game would have completed the week. The season ends with every
+  week complete, so the whole board shows.
+- **It does not commit.** What to say about a week is a judgement, and so is the
+  one thing it exists to surface.
+- **It diffs the old JSON against the new** and names any already-published game
+  that changed, with the fields collapsed (`plays[].hwp ×5` rather than five
+  paths). See §3: nflverse rewrites the past, quietly and usually for the
+  better. `--strict` turns that into exit 2.
+
+The judgement it cannot make: whether a revision to a live game is a correction
+or a regression. Everything else here is deterministic.
+
+## 7. Conventions worth keeping
 
 - **Design tokens are unchanged from F1**, except five `--nfl-*` additions:
   `--nfl-turnover` aliases `--f1-corner`, so NFL code has an NFL name for the one

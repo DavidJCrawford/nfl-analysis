@@ -7,7 +7,7 @@
 CACHE ?= .cache/nflverse
 SITE  := site
 
-.PHONY: help fetch emit verify data build links preview check clean
+.PHONY: help fetch emit verify data week build links preview check clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  %-10s %s\n", $$1, $$2}'
@@ -22,6 +22,9 @@ verify: ## Check the emitted JSON against the published scores and drive summari
 	python3 pipeline/verify.py
 
 data: fetch emit verify ## Full data refresh
+
+week: ## The weekly refresh: fetch, emit, verify, build, and report what moved
+	python3 pipeline/update.py $(ARGS)
 
 build: verify ## Build the site and its search index, then check its links
 	cd $(SITE) && npm run build
