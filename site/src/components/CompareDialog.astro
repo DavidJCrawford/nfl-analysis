@@ -1,0 +1,243 @@
+---
+/** "Compare" — a button in the replay's clothes, and the modal behind it.
+ *
+ *  The two kinds differ in one way that matters. There are 31 other clubs, so
+ *  they are written into the page: the modal opens instantly and works with
+ *  nothing fetched. There are 1,742 other players, so those are fetched the
+ *  first time the modal is opened — and the file it fetches is the same one
+ *  the comparison page itself needs, so opening the modal warms the cache for
+ *  the page it sends you to.
+ *
+ *  The player list opens on men of the same position rather than on all 1,742.
+ *  Comparing a quarterback with a long snapper produces an empty chart, and a
+ *  picker whose first suggestion is nonsense teaches the reader the feature is
+ *  nonsense. Searching reaches everybody.
+ */
+import { getTeams, getTeamOrder } from '@lib/data';
+import { u } from '@lib/url';
+
+interface Props {
+  kind: 'team' | 'player';
+  /** The subject whose page this is — it is never offered as the other side. */
+  id: string;
+  name: string;
+  /** For a player: his position, which the list opens on. */
+  pos?: string | null;
+}
+const { kind, id, name, pos = null } = Astro.props;
+
+const teams = getTeams();
+const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
+---
+
+<button class="compare-open" type="button" data-compare-open>Compare</button>
+
+<dialog
+  class="compare-dialog"
+  data-compare-dialog
+  data-kind={kind}
+  data-id={id}
+  data-pos={pos ?? ''}
+  aria-label={`Compare ${name} with another ${kind}`}
+>
+  <div class="cd-inner">
+    <header class="cd-head">
+      <div>
+        <p class="cd-eyebrow">Compare</p>
+        <h2 class="cd-title">{name} against…</h2>
+      </div>
+      <button class="cd-close" type="button" data-compare-close aria-label="Close">Close</button>
+    </header>
+
+    {kind === 'player' && (
+      <label class="cd-search">
+        <span class="visually-hidden">Search for a player</span>
+        <input type="search" data-cd-search autocomplete="off"
+               placeholder={pos ? `Other ${pos}s — or search everyone` : 'Search for a player'} />
+      </label>
+    )}
+
+    <div class="cd-list" data-cd-list>
+      {kind === 'team' && others.map((abbr) => (
+        <a class="cd-item" href={u(`/compare/teams/?a=${id}&b=${abbr}`)}>
+          <img src={u(`/logos/sm/${abbr}.webp`)} alt="" width="34" height="34" />
+          <span class="cd-name">{teams[abbr]!.nick}</span>
+          <span class="cd-sub">{teams[abbr]!.div}</span>
+        </a>
+      ))}
+      {kind === 'player' && <p class="cd-state" data-cd-state>Loading the squads…</p>}
+    </div>
+  </div>
+</dialog>
+
+<script>
+  import { u } from '@lib/url';
+
+  for (const dialog of document.querySelectorAll<HTMLDialogElement>('[data-compare-dialog]')) {
+    const root = dialog.parentElement!;
+    const open = root.querySelector<HTMLButtonElement>('[data-compare-open]')
+      ?? document.querySelector<HTMLButtonElement>('[data-compare-open]')!;
+    const list = dialog.querySelector<HTMLElement>('[data-cd-list]')!;
+    const kind = dialog.dataset.kind;
+    const me = dialog.dataset.id!;
+    const pos = dialog.dataset.pos || '';
+
+    open.addEventListener('click', () => { dialog.showModal(); load(); });
+    dialog.querySelector('[data-compare-close]')!.addEventListener('click', () => dialog.close());
+    // Clicking the backdrop is the same as clicking Close, which is what every
+    // other modal on the web does and what people try first.
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+
+    if (kind !== 'player') continue;
+
+    const search = dialog.querySelector<HTMLInputElement>('[data-cd-search]')!;
+    let people: any[] | null = null;
+
+    function card(p: any): HTMLAnchorElement {
+      const a = document.createElement('a');
+      a.className = 'cd-item';
+      a.href = u(`/compare/players/?a=${me}&b=${p.id}`);
+      if (p.face) {
+        const img = document.createElement('img');
+        img.className = 'cd-face'; img.src = u(`/faces/${p.id}.webp`);
+        img.alt = ''; img.width = 34; img.height = 34; img.loading = 'lazy';
+        a.append(img);
+      } else {
+        const s = document.createElement('span');
+        s.className = 'cd-face'; a.append(s);
+      }
+      const nm = document.createElement('span');
+      nm.className = 'cd-name'; nm.textContent = p.name;
+      const sub = document.createElement('span');
+      sub.className = 'cd-sub';
+      sub.textContent = `${p.team}${p.pos ? ` · ${p.pos}` : ''}`;
+      a.append(nm, sub);
+      return a;
+    }
+
+    function render(): void {
+      if (!people) return;
+      const q = search.value.trim().toLowerCase();
+      // No search: his own position, busiest first — the comparison somebody
+      // actually came to make. With a search: everybody.
+      const hits = (q
+        ? people.filter((p) => p.name.toLowerCase().includes(q)
+            || p.team.toLowerCase() === q || (p.pos ?? '').toLowerCase() === q)
+        : people.filter((p) => (p.pos ?? '') === pos)
+      ).slice(0, 60);
+      if (!hits.length) {
+        list.replaceChildren(Object.assign(document.createElement('p'),
+          { className: 'cd-state', textContent: q ? 'Nobody by that name.' : 'No one else at this position.' }));
+        return;
+      }
+      list.replaceChildren(...hits.map(card));
+    }
+
+    async function load(): Promise<void> {
+      if (people) return;
+      try {
+        const r = await fetch(u('/data/compare-players.json'));
+        const all = (await r.json()).players as Record<string, any>;
+        people = Object.values(all)
+          .filter((p) => p.id !== me)
+          .sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+      } catch {
+        list.replaceChildren(Object.assign(document.createElement('p'),
+          { className: 'cd-state', textContent: 'The squads could not be loaded.' }));
+        return;
+      }
+      render();
+    }
+
+    search.addEventListener('input', render);
+  }
+</script>
+
+<style>
+  /* The same button as the replay's, because it does the same kind of thing:
+     it opens something over the page rather than taking you off it. */
+  .compare-open {
+    flex: none;
+    display: inline-flex; align-items: center;
+    height: var(--ks-control-md); padding: 0 18px;
+    background: var(--ks-instrument); color: var(--ks-instrument-text);
+    border: 0; border-radius: var(--ks-radius-pill);
+    cursor: pointer;
+    font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    box-shadow: var(--ks-lift-1);
+    transition: box-shadow var(--ks-settle) var(--ks-ease);
+  }
+  .compare-open:hover { box-shadow: var(--ks-lift-2); }
+  .compare-open:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 3px; }
+
+  .compare-dialog {
+    width: min(760px, 94vw); max-height: min(78dvh, 720px);
+    margin: auto; padding: 0; border: 0;
+    border-radius: var(--ks-radius-md);
+    background: var(--ks-instrument-deep);
+    color: var(--ks-instrument-text);
+    box-shadow: var(--ks-lift-2);
+    overflow: hidden;
+  }
+  .compare-dialog::backdrop { background: oklch(8% 0 0 / 0.72); }
+  .cd-inner { display: flex; flex-direction: column; max-height: inherit; padding: clamp(16px, 2.4vw, 26px); }
+
+  .cd-head { display: flex; align-items: flex-start; gap: 14px; }
+  .cd-eyebrow {
+    margin: 0; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-instrument-muted);
+  }
+  .cd-title { margin: 4px 0 0; font-size: var(--ks-type-title-size); font-weight: 600; }
+  .cd-close {
+    margin-left: auto; flex: none;
+    height: var(--ks-control-md); padding: 0 14px;
+    background: transparent; color: var(--ks-instrument-muted);
+    border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-pill);
+    cursor: pointer; font-size: var(--ks-type-eyebrow-size);
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .cd-close:hover { color: var(--ks-instrument-text); }
+
+  .cd-search { display: block; margin-top: 14px; }
+  .cd-search input {
+    width: 100%; height: 36px; padding: 0 12px; font: inherit;
+    font-size: var(--ks-type-ui-size);
+    background: var(--ks-instrument-raised); color: var(--ks-instrument-text);
+    border: 1px solid var(--ks-instrument-rule); border-radius: 6px;
+  }
+  .cd-search input::placeholder { color: var(--ks-instrument-muted); }
+
+  .cd-list {
+    margin-top: 14px; overflow-y: auto; min-height: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 10px;
+    align-content: start;
+  }
+  /* Everything below hangs off `.cd-list`, which is in the template and so
+     carries Astro's scope attribute. The club rows are rendered here and the
+     player rows are built by the script, and a scoped `.cd-item { }` styles
+     the first and silently ignores the second — which is what it did: the
+     clubs came out as a grid and the players as a run of inline text. */
+  .cd-list :global(.cd-item) {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+    padding: 7px 9px; border: 0; border-radius: 6px; color: inherit;
+  }
+  .cd-list :global(.cd-item:hover) { background: var(--ks-instrument-raised); }
+  .cd-list :global(.cd-item:focus-visible) { outline: 2px solid var(--ks-kinpaku); outline-offset: -2px; }
+  .cd-list :global(.cd-item img), .cd-list :global(.cd-face) { flex: none; width: 34px; height: 34px; }
+  .cd-list :global(.cd-face) {
+    border-radius: 50%; object-fit: cover; object-position: center top;
+    background: var(--ks-instrument-raised);
+  }
+  .cd-list :global(.cd-name) {
+    font-size: var(--ks-type-ui-size); color: var(--ks-instrument-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cd-list :global(.cd-sub) { font-size: var(--ks-type-eyebrow-size); color: var(--ks-instrument-muted); white-space: nowrap; }
+  .cd-list :global(.cd-state) { margin: 8px 0; color: var(--ks-instrument-muted); font-size: var(--ks-type-ui-size); grid-column: 1 / -1; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+</style>

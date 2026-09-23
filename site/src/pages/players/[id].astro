@@ -14,6 +14,7 @@
 import Base from '@layouts/Base.astro';
 import Stat from '@components/Stat.astro';
 import Face from '@components/people/Face.astro';
+import CompareDialog from '@components/CompareDialog.astro';
 import { getPlayer, getPlayerIndex, getTeams, getGames } from '@lib/data';
 import { FIELDS, GROUP_LABEL, groupsOf, headline, show } from '@lib/stats';
 import { longDate, shortDate } from '@lib/format';
@@ -103,6 +104,10 @@ const title = p.name;
       </p>
     )}
   </header>
+
+  <div class="wrap actions">
+    <CompareDialog kind="player" id={p.id} name={p.name} pos={p.depth_pos ?? p.pos} />
+  </div>
 
   <hr class="rule" />
 
@@ -236,6 +241,7 @@ const title = p.name;
     max-width: 820px;
   }
   .noplay { margin-top: clamp(20px, 3vw, 32px); }
+  .actions { display: flex; justify-content: flex-end; padding-bottom: clamp(18px, 2.4vw, 28px); }
 
   .two-up {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));

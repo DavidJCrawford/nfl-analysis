@@ -30,6 +30,7 @@ human eye. `--strict` makes those stop the run rather than just report.
 | `/games/2026/1/NE-SEA/` | one game: the replay, every play, the totals |
 | `/teams/` · `/teams/SEA/` | 32 clubs; one club's season, squad and totals for and against |
 | `/players/` · `/players/00-0033873/` | the league's leaders and every name; one player's life, season and games |
+| `/compare/teams/` · `/compare/players/` | two clubs or two players side by side |
 | `/credits/` | sources and terms |
 
 There is no `/games/` index: the front page is that list. A game page lives at a
@@ -40,7 +41,11 @@ Two checks run on every build and both fail it. `pipeline/verify.py` re-reads th
 emitted JSON and tests it against things it did not produce — the published final
 scores, the league's own drive summaries, the point values football allows, and
 whether the ball ever teleports. `pipeline/check_site.py` follows every internal
-link in the built site — 38,663 of them across 2,051 pages.
+link in the built site — 42,444 of them across 2,053 pages.
+
+The two comparison pages are the only ones drawn in the browser rather than at
+build time, because a pair cannot be a page: 1,743 players make 1.5 million of
+them.
 
 ## Data
 

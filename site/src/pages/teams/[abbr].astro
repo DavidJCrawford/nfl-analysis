@@ -4,6 +4,7 @@
 import Base from '@layouts/Base.astro';
 import Stat from '@components/Stat.astro';
 import Face from '@components/people/Face.astro';
+import CompareDialog from '@components/CompareDialog.astro';
 import {
   getRecords, getTeams, getTeamSeason, getWeeks, getGames, getTeamStats, getSquad, tackles,
 } from '@lib/data';
@@ -133,6 +134,10 @@ const STATUS: Record<string, string> = {
       <Stat label="Points for" value={pointsFor} />
       <Stat label="Points against" value={pointsAgainst} />
       <Stat label="Differential" value={signed(pointsFor - pointsAgainst)} />
+    </div>
+
+    <div class="actions">
+      <CompareDialog kind="team" id={abbr} name={team.nick} />
     </div>
 
     <p class="lead measure" style="margin-top:28px">
@@ -276,6 +281,9 @@ const STATUS: Record<string, string> = {
     max-width: 760px;
   }
   .headline { margin-top: 0.2em; }
+  /* Right-aligned above the prose, the way the replay's own button sits above
+     the strip it opens. */
+  .actions { display: flex; justify-content: flex-end; margin-top: clamp(18px, 2.2vw, 26px); }
 
   .weeks { list-style: none; margin: 28px 0 0; padding: 0; max-width: 780px; }
   .week { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--ks-rule); }

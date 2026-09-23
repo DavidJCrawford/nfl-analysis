@@ -132,8 +132,28 @@ a passing chart, and the site should not imply otherwise.
                         week by week, and its squad
 /players/               The league's leaders, then every name
 /players/00-0033873/    One player: his life, his season, his games
+/compare/teams/?a=&b=   Two clubs, side by side
+/compare/players/?a=&b= Two players, side by side
 /credits/               Sources and terms
 ```
+
+The two comparison pages are the only addresses on the site that carry a query
+string, and the only pages drawn in the browser. A pair cannot be a page: 32
+clubs make 496 pairs, but 1,743 players make 1.5 million, and restricting them
+to matching positions still leaves about 198,000. Both are built the same way
+rather than pre-rendering the clubs and not the players, because two features
+that do the same thing should not be two different things. The pair is still
+in the URL, so a comparison is still a link somebody can send.
+
+The chart is a diverging bar — a label down the middle, each side's bar growing
+outward, both scaled against the larger of the two. Not a radar chart: a radar
+plots quantities on axes with nothing to do with each other, closes the shape,
+and invites the reader to compare areas that mean nothing. Two bars from a
+common baseline is the one comparison the eye does accurately.
+
+Only statistics both subjects have are drawn. A quarterback and a cornerback
+share none, and 412 passing yards against a blank is not a comparison; the page
+says so and names what each of them has instead.
 
 A player page is reached from a box score, from a squad, from a leaderboard and
 from the directory — every one of the 847 box-score lines in a published game

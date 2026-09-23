@@ -23,15 +23,25 @@ site/data/                    committed: schedule.json, teams.json,
                               team-stats.json, players.json,
                               games/*.json (32), players/*.json (1,743)
 site/src/lib/                 data.ts, game.ts, types.ts, format.ts, url.ts,
-                              scope.ts, stats.ts, replay.ts
+                              scope.ts, stats.ts, compare.ts, replay.ts
 site/src/components/game/     GameReplay, BoxScore, PlayerLines, PlayLog
 site/src/components/people/   Face
+site/src/components/          CompareDialog, Stat
 site/src/pages/               index, games/[season]/[week]/[matchup],
                               teams/, teams/[abbr], players/, players/[id],
-                              credits
+                              compare/teams, compare/players, credits
 site/public/                  logos/ (32), logos/sm/ (32), faces/ (1,734),
-                              nfl.webp
+                              data/ (two comparison payloads), nfl.webp
 ```
+
+**The comparison pages are the one thing on this site rendered in the browser.**
+Everything else is pre-rendered, and this is not a change of mind: a pair
+cannot be a page. Thirty-two clubs make 496 pairs, which would be fine on its
+own, but 1,743 players make 1.5 million, and holding them to matching
+positions still leaves about 198,000. So both are one page reading two names
+out of a query string, and `emit_compare` writes the two payloads they fetch
+into `site/public/data/`. The club payload is 8 KB over the wire and the
+player payload 55 KB, which is why they are two files and not one.
 
 `make week` works and produces 2,051 pages and 38,663 internal links.
 
@@ -235,6 +245,17 @@ page; today no game has one.
 **When something does not add up, search for what actually happened.** Every
 anomaly this session turned out to be real football described by the data, not
 a bug in the data. Assume that first.
+
+**A scoped style does not reach an element built by a script.** Astro compiles
+`.versus { }` to `.versus[data-astro-cid-xxx]`, and an element created with
+`document.createElement` has no such attribute, so the rule matches nothing
+and fails silently — no warning, no error, just an unstyled heap. This was hit
+twice in one session: once on the comparison header, and again in the compare
+dialog, where the club rows are rendered by Astro and styled correctly while
+the player rows are built by the script and were not. Either anchor the
+selector on an element that *is* in the template and put `:global()` around
+the rest — `.cd-list :global(.cd-item)` — or put the rules in a plain
+stylesheet, which is what `src/styles/compare.css` is for.
 
 ## 5. What to do next, and what to be careful of
 

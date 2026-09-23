@@ -11,6 +11,10 @@ Five kinds of output:
     players.json            everyone with a page, and their season totals
     players/<gsis_id>.json  one player: biography, season, game by game
 
+and two payloads written to site/public/data/ for the browser rather than the
+build, because a comparison of two subjects cannot be pre-rendered — see
+`emit_compare`.
+
 The two pairs are the same shape twice: an index light enough for a page that
 lists everybody, and a file per subject with the detail in it.
 
@@ -1329,6 +1333,74 @@ def sum_groups(rows: list[dict]) -> dict[str, dict]:
     return out
 
 
+# ── Comparison payloads ──────────────────────────────────────────────────────
+#
+# These are the only files this pipeline writes for a browser rather than for
+# the build. Everything else in site/data/ is read by Astro while the pages are
+# being made; these are fetched by a page that has already been served.
+#
+# They exist because comparison cannot be pre-rendered. Thirty-two clubs make
+# 496 pairs, which would be a reasonable number of pages — but 1,743 players
+# make 1.5 million, and restricting it to matching positions still leaves about
+# 198,000. So a comparison is one page that reads two names out of its query
+# string, and the numbers have to reach it at run time.
+#
+# Split in two because the club page never needs the player payload: clubs are
+# 13 KB over the wire and players 69 KB, and a reader comparing two defences
+# should not be made to download seventeen hundred people to do it.
+
+PUBLIC = ROOT / "site" / "public" / "data"
+
+
+def emit_compare(season: int, teams: dict, games: list[dict], index: dict) -> int:
+    written = 0
+
+    # Clubs, with the record and the points that live in the schedule rather
+    # than in the stats files, so the page needs only this one fetch.
+    rec = {a: {"w": 0, "l": 0, "t": 0, "pf": 0, "pa": 0, "games": 0} for a in teams}
+    for g in games:
+        if not g["played"] or g.get("home_score") is None:
+            continue
+        h, a = g["home"], g["away"]
+        hs, as_ = g["home_score"], g["away_score"]
+        for side, own, other in ((h, hs, as_), (a, as_, hs)):
+            if side not in rec:
+                continue
+            r = rec[side]
+            r["games"] += 1
+            r["pf"] += own
+            r["pa"] += other
+            r["w" if own > other else "l" if own < other else "t"] += 1
+
+    ts = json.loads((OUT / "team-stats.json").read_text("utf-8"))["teams"]
+    clubs = {}
+    for abbr, t in sorted(teams.items()):
+        clubs[abbr] = {
+            "abbr": abbr, "name": t["name"], "nick": t["nick"],
+            "conf": t["conf"], "div": t["div"],
+            "color": t["color"], "color2": t["color2"],
+            **rec.get(abbr, {}),
+            "for": ts.get(abbr, {}).get("for", {}),
+            "against": ts.get(abbr, {}).get("against", {}),
+        }
+    written += write_json(PUBLIC / "compare-teams.json", {"season": season, "teams": clubs})
+
+    # People. The same entries the index carries, minus the fields a
+    # comparison has no use for — there is no reason to send 1,743 years of
+    # experience across the wire to draw two bar charts.
+    people = {
+        pid: {
+            "id": pid, "name": p["name"], "team": p["team"],
+            "pos": p["depth_pos"] or p["pos"], "unit": p["pos"],
+            "no": p["no"], "face": p["face"], "games": p["games"],
+            "status": p["status"], "stats": p["stats"],
+        }
+        for pid, p in sorted(index.items())
+    }
+    written += write_json(PUBLIC / "compare-players.json", {"season": season, "players": people})
+    return written
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -1406,7 +1478,9 @@ def main() -> int:
     written += emit_team_stats(season, live)
     people, heads = emit_people(season, live, games)
     written += people
-    written += emit_faces({p for p in json.loads((OUT / "players.json").read_text("utf-8"))["players"]})
+    index = json.loads((OUT / "players.json").read_text("utf-8"))["players"]
+    written += emit_faces(set(index))
+    written += emit_compare(season, teams, games, index)
 
     print(f"{len(games)} games, {len(played)} played, {len(teams)} teams, {heads} players")
     if logos:
