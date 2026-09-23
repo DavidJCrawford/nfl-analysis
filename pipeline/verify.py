@@ -454,6 +454,129 @@ def check_box(r: Report, game: dict) -> None:
          f"{gid}: player lines claim {player_tds} scrimmage touchdowns, plays show {scrimmage_tds}")
 
 
+# ── People ───────────────────────────────────────────────────────────────────
+
+# Stats that add up over a set of games. The rest do not, and summing them
+# would be a check that fails for arithmetic rather than for data: `epa` is a
+# float and would fail on rounding, `cpoe` and `share` are averages, and `long`
+# is a maximum.
+NOT_SUMMABLE = {"epa", "cpoe", "share", "long"}
+
+
+def sum_log(log: list[dict]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for row in log:
+        for group, stats in row["stats"].items():
+            acc = out.setdefault(group, {})
+            for key, v in stats.items():
+                if key not in NOT_SUMMABLE:
+                    acc[key] = acc.get(key, 0) + v
+    return out
+
+
+def check_people(r: Report, index: dict, teams: dict, ids: set[str]) -> None:
+    """The register itself: who is in it, and that each one is a real club's."""
+    for pid, p in index.items():
+        r.ok(p["team"] in teams, f"{pid}: team {p['team']!r} is not a club this season")
+        r.ok(bool(p["name"]), f"{pid}: no name")
+        r.ok(p["status"] in {"ACT", "RES", "DEV", "CUT", "RET", "EXE"},
+             f"{pid}: unknown roster status {p['status']!r}")
+        r.ok(p["id"] == pid, f"{pid}: id disagrees with its key")
+    # Everyone who appears in a game file must have a page to be linked to.
+    missing = ids - set(index)
+    r.ok(not missing, f"{len(missing)} player(s) with stats have no page: {sorted(missing)[:5]}")
+
+
+def check_player(r: Report, detail: dict, index: dict, games: dict) -> None:
+    """One player: his season against his own games, and his games against the
+    schedule."""
+    pid = detail["id"]
+    entry = index.get(pid)
+    if not entry:
+        r.ok(False, f"{pid}: detail file with no index entry")
+        return
+    r.eq(len(detail["log"]), entry["games"], f"{pid}: games counted")
+
+    # nflverse publishes the season totals and the weekly rows as two separate
+    # files. Nothing guarantees they agree; this is the check that they do.
+    want = sum_log(detail["log"])
+    for group, stats in want.items():
+        got = detail["stats"].get(group)
+        if got is None:
+            r.ok(False, f"{pid}: played {group} but has no season {group} total")
+            continue
+        for key, total in stats.items():
+            r.eq(got.get(key, 0), total, f"{pid}: season {group}.{key} against the sum of his games")
+
+    seen = set()
+    for row in detail["log"]:
+        gid = row["game"]
+        g = games.get(gid)
+        r.ok(g is not None, f"{pid}: week {row['week']} references unknown game {gid!r}")
+        if not g:
+            continue
+        r.ok(gid not in seen, f"{pid}: two rows for {gid}")
+        seen.add(gid)
+        r.eq(row["week"], g["week"], f"{pid}: week of {gid}")
+        sides = {g["home"], g["away"]}
+        r.ok(row["team"] in sides, f"{pid}: played for {row['team']} in {gid}, which is {sides}")
+        r.ok(row["opp"] in sides, f"{pid}: opponent {row['opp']} in {gid}, which is {sides}")
+        r.ok(row["team"] != row["opp"], f"{pid}: played himself in {gid}")
+        if "result" in row:
+            mine, theirs = row["pf"], row["pa"]
+            want_r = "W" if mine > theirs else "L" if mine < theirs else "T"
+            r.eq(row["result"], want_r, f"{pid}: result of {gid}")
+
+
+def check_player_box(r: Report, game: dict, by_game: dict) -> None:
+    """The strong one: two independent routes to the same number.
+
+    This pipeline builds a box score by walking the play-by-play itself.
+    nflverse aggregates the same plays into its own per-player rows. Summing
+    those rows per club and comparing with the box score compares two
+    derivations that share nothing but the source, so a disagreement is a bug
+    in one of them — which is how the sack-as-pass-attempt error was found."""
+    gid = game["id"]
+    for team, box in game["box"].items():
+        agg = by_game.get((gid, team), {})
+        for label, key, group, stat in (
+            ("pass attempts", "pass_att", "passing", "att"),
+            ("completions", "completions", "passing", "cmp"),
+            ("passing yards", "pass_yards", "passing", "yards"),
+            ("interceptions thrown", "interceptions", "passing", "int"),
+            ("sacks taken", "sacks", "passing", "sacked"),
+            ("rush attempts", "rush_att", "rushing", "att"),
+            ("rushing yards", "rush_yards", "rushing", "yards"),
+        ):
+            r.eq(agg.get(group, {}).get(stat, 0), box[key],
+                 f"{gid} {team}: {label}, nflverse against this pipeline's own count")
+        # Within nflverse's own rows: every completion is somebody's catch.
+        rec = agg.get("receiving", {})
+        pas = agg.get("passing", {})
+        r.eq(rec.get("rec", 0), pas.get("cmp", 0), f"{gid} {team}: receptions against completions")
+        r.eq(rec.get("yards", 0), pas.get("yards", 0), f"{gid} {team}: receiving against passing yards")
+
+
+def check_team_stats(r: Report, ts: dict, teams: dict, games: dict) -> None:
+    for abbr, t in ts["teams"].items():
+        r.ok(abbr in teams, f"team-stats: {abbr} is not a club this season")
+        want = sum_log(t["weeks"])
+        for group, stats in want.items():
+            got = t["for"].get(group)
+            if got is None:
+                r.ok(False, f"{abbr}: played {group} but has no season total")
+                continue
+            for key, total in stats.items():
+                r.eq(got.get(key, 0), total, f"{abbr}: season {group}.{key} against the sum of its weeks")
+        for w in t["weeks"]:
+            g = games.get(w["game"])
+            r.ok(g is not None, f"{abbr}: week {w['week']} references unknown game {w['game']!r}")
+            if g:
+                r.ok(abbr in {g["home"], g["away"]}, f"{abbr}: not in {w['game']}")
+                r.eq(w["opp"], g["away"] if g["home"] == abbr else g["home"],
+                     f"{abbr}: opponent in {w['game']}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -471,6 +594,27 @@ def main() -> int:
     r.eq(schedule["season"], season, "season")
     check_schedule(r, schedule, teams, csv_games)
 
+    index = load(DATA / "players.json")["players"]
+    by_game: dict[tuple[str, str], dict] = {}
+    with_stats: set[str] = set()
+    for pid in index:
+        detail = load(DATA / "players" / f"{pid}.json")
+        check_player(r, detail, index, {g["id"]: g for g in schedule["games"]})
+        if detail["log"]:
+            with_stats.add(pid)
+        # Rolled up here so the per-game check below can compare in one pass
+        # rather than re-reading seventeen hundred files per game.
+        for row in detail["log"]:
+            acc = by_game.setdefault((row["game"], row["team"]), {})
+            for group, stats in row["stats"].items():
+                g_acc = acc.setdefault(group, {})
+                for key, v in stats.items():
+                    if key not in NOT_SUMMABLE:
+                        g_acc[key] = g_acc.get(key, 0) + v
+    check_people(r, index, teams, with_stats)
+    check_team_stats(r, load(DATA / "team-stats.json"), teams,
+                     {g["id"]: g for g in schedule["games"]})
+
     played = 0
     for g in schedule["games"]:
         if not g.get("detail"):
@@ -484,6 +628,7 @@ def main() -> int:
         check_units(r, game)
         check_snap(r, game)
         check_box(r, game)
+        check_player_box(r, game, by_game)
 
     if r.fails:
         print(f"FAILED — {len(r.fails)} of {r.checks} checks, over {played} games\n")
@@ -493,7 +638,8 @@ def main() -> int:
             print(f"  … and {len(r.fails) - 40} more")
         return 1
 
-    print(f"{r.checks} checks pass over {played} games and {len(schedule['games'])} schedule rows")
+    print(f"{r.checks} checks pass over {played} games, {len(index)} players "
+          f"and {len(schedule['games'])} schedule rows")
     return 0
 
 

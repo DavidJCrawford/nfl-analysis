@@ -2,11 +2,17 @@
 
     python3 pipeline/emit.py [season]
 
-Three kinds of output:
+Five kinds of output:
 
     teams.json              32 teams: name, division, colours
+    team-stats.json         each club's season and weeks, for and against
     schedule.json           all 272 games, one light row each — the home page
     games/<game_id>.json    one played game in full — drives, plays, box score
+    players.json            everyone with a page, and their season totals
+    players/<gsis_id>.json  one player: biography, season, game by game
+
+The two pairs are the same shape twice: an index light enough for a page that
+lists everybody, and a file per subject with the detail in it.
 
 Serialisation is canonical (sorted keys, tight separators, fixed float
 precision, no timestamps anywhere). Re-running on unchanged input produces
@@ -744,7 +750,12 @@ def build_box(rows: list[dict], drives: list[dict], home: str, away: str) -> dic
         if flag(r, "rush_attempt") and not flag(r, "two_point_attempt"):
             t["rush_att"] += 1
             t["rush_yards"] += i(r, "rushing_yards") or 0
-        if flag(r, "pass_attempt") and not flag(r, "two_point_attempt"):
+        # nflverse sets pass_attempt on a sack — it marks a dropback, not an
+        # official attempt — and a sack is not a pass attempt on any box score
+        # the NFL prints. Counting it as one inflated every team's attempts by
+        # its sacks taken: 150 of them across the first two weeks. Completions
+        # and passing yards were never affected, because a sack is neither.
+        if flag(r, "pass_attempt") and not flag(r, "sack") and not flag(r, "two_point_attempt"):
             t["pass_att"] += 1
             t["completions"] += 1 if flag(r, "complete_pass") else 0
             t["pass_yards"] += i(r, "passing_yards") or 0
@@ -780,7 +791,9 @@ def build_players(rows: list[dict]) -> dict[str, list[dict]]:
         if pos is None:
             continue
 
-        if (p := s(r, "passer_player_name")) and flag(r, "pass_attempt"):
+        # A sack is not an attempt — see build_box. The sack is counted on its
+        # own, immediately below.
+        if (p := s(r, "passer_player_name")) and flag(r, "pass_attempt") and not flag(r, "sack"):
             e = passing.setdefault((pos, p), {"team": pos, "name": p, "att": 0, "cmp": 0,
                                               "yards": 0, "td": 0, "int": 0, "sacks": 0})
             e["att"] += 1
@@ -936,6 +949,371 @@ def r0(rows: list[dict]) -> dict:
     return rows[0] if rows else {}
 
 
+# ── People ───────────────────────────────────────────────────────────────────
+#
+# Two outputs, shaped like the two the games already have: one index of
+# everybody, and one file per person with the detail in it.
+#
+# The numbers are nflverse's own aggregation of the play-by-play rather than
+# this pipeline's. They could be summed here — every one of them is derivable
+# from the plays — but a receiving yard would then mean whatever this file
+# decided it meant, and it should mean what it means everywhere else. The
+# aggregation is checked against the game files in verify.py instead.
+
+# Which columns make up each group, as (emitted key, nflverse column, rounding).
+# `int` rounds to a whole number; a digit count keeps that many decimals.
+#
+# The explosive-play counts (passing_10/16/20/40 and their rushing and
+# receiving twins) are deliberately absent. They are almost certainly "plays of
+# N+ yards", but nflverse does not say so where this pipeline can read it, and
+# a column whose definition has been guessed at is not something to publish.
+PLAYER_STATS: dict[str, list[tuple[str, str, object]]] = {
+    "passing": [
+        ("cmp", "completions", int), ("att", "attempts", int),
+        ("yards", "passing_yards", int), ("td", "passing_tds", int),
+        ("int", "passing_interceptions", int), ("sacked", "sacks_suffered", int),
+        ("sack_yards", "sack_yards_lost", int), ("air", "passing_air_yards", int),
+        ("yac", "passing_yards_after_catch", int), ("first", "passing_first_downs", int),
+        ("epa", "passing_epa", 2), ("cpoe", "passing_cpoe", 1),
+    ],
+    "rushing": [
+        ("att", "carries", int), ("yards", "rushing_yards", int),
+        ("td", "rushing_tds", int), ("first", "rushing_first_downs", int),
+        ("lost", "rushing_fumbles_lost", int), ("epa", "rushing_epa", 2),
+    ],
+    "receiving": [
+        ("rec", "receptions", int), ("tgt", "targets", int),
+        ("yards", "receiving_yards", int), ("td", "receiving_tds", int),
+        ("first", "receiving_first_downs", int), ("air", "receiving_air_yards", int),
+        ("yac", "receiving_yards_after_catch", int),
+        ("share", "target_share", 3), ("epa", "receiving_epa", 2),
+    ],
+    "defence": [
+        ("solo", "def_tackles_solo", int), ("assist", "def_tackle_assists", int),
+        ("tfl", "def_tackles_for_loss", int), ("sacks", "def_sacks", 1),
+        ("qb_hits", "def_qb_hits", int), ("int", "def_interceptions", int),
+        ("pd", "def_pass_defended", int), ("ff", "def_fumbles_forced", int),
+        ("td", "def_tds", int),
+    ],
+    "kicking": [
+        ("fgm", "fg_made", int), ("fga", "fg_att", int), ("long", "fg_long", int),
+        ("patm", "pat_made", int), ("pata", "pat_att", int),
+    ],
+    "punting": [
+        ("att", "pt_att", int), ("yards", "pt_yards", int), ("net", "pt_net_yards", int),
+        ("in20", "pt_inside_20", int), ("long", "pt_long", int),
+    ],
+    "returns": [
+        ("pr", "punt_returns", int), ("pr_yards", "punt_return_yards", int),
+        ("kr", "kickoff_returns", int), ("kr_yards", "kickoff_return_yards", int),
+    ],
+    "penalty": [("n", "penalties", int), ("yards", "penalty_yards", int)],
+}
+
+# A group is shown only when the player did that thing. Without this every
+# quarterback would carry nine zeroed tackling fields and every page would have
+# to know to hide them.
+def stat_group(row: dict, spec: list[tuple[str, str, object]]) -> dict | None:
+    out: dict = {}
+    live = False
+    for key, col, nd in spec:
+        v = i(row, col) if nd is int else f(row, col, nd)  # type: ignore[arg-type]
+        if v is None:
+            continue
+        out[key] = v
+        # EPA is signed and a bad day is a real number, so it cannot be what
+        # decides a group is empty — only the counting stats can.
+        if v and key not in ("epa", "cpoe"):
+            live = True
+    return out if live else None
+
+
+def all_groups(row: dict) -> dict[str, dict]:
+    got = {}
+    for name, spec in PLAYER_STATS.items():
+        g = stat_group(row, spec)
+        if g is not None:
+            got[name] = g
+    return got
+
+
+def snap_index(season: int, roster: list[dict]) -> dict[tuple[str, str], dict]:
+    """Snaps per player per game, keyed (gsis_id, game_id).
+
+    snap_counts is the only file that counts the offensive line, who play every
+    down and record almost nothing. It is also the only one keyed on Pro
+    Football Reference's player id rather than the league's, so it has to be
+    joined: `pfr_id` where the roster has one (80.6% of rows), and otherwise on
+    name and club, which resolves a further 18.1% with no ambiguity at all —
+    no (name, club) pair in the roster maps to two players. The ~1.3% that
+    resolve to neither are name variants ("Paris Johnson" against "Paris
+    Johnson Jr.") and are reported, not guessed at."""
+    path = CACHE / f"snap_counts_{season}.csv"
+    if not path.exists():
+        return {}
+    by_pfr = {r["pfr_id"]: r["gsis_id"] for r in roster if s(r, "pfr_id")}
+    by_name: dict[tuple[str, str], set[str]] = collections.defaultdict(set)
+    for r in roster:
+        name, team = s(r, "full_name"), s(r, "team")
+        if name and team:
+            by_name[(name.lower(), team)].add(r["gsis_id"])
+
+    out: dict[tuple[str, str], dict] = {}
+    lost = 0
+    for r in read_csv(path):
+        pid = by_pfr.get(s(r, "pfr_player_id") or "")
+        if not pid:
+            hit = by_name.get(((s(r, "player") or "").lower(), s(r, "team") or ""), set())
+            pid = next(iter(hit)) if len(hit) == 1 else None
+        if not pid:
+            lost += 1
+            continue
+        gid = s(r, "game_id")
+        if not gid:
+            continue
+        snaps = {}
+        for key, col in (("off", "offense_snaps"), ("def", "defense_snaps"), ("st", "st_snaps")):
+            n = i(r, col)
+            if n:
+                snaps[key] = n
+        for key, col in (("off_pct", "offense_pct"), ("def_pct", "defense_pct"), ("st_pct", "st_pct")):
+            v = f(r, col, 2)
+            if v:
+                snaps[key] = v
+        if snaps:
+            out[(pid, gid)] = snaps
+    if lost:
+        print(f"  {lost} snap-count row(s) matched no player")
+    return out
+
+
+def emit_faces(ids: set[str]) -> int:
+    """The cached portraits, for the people the site actually has a page for.
+
+    Copied rather than linked, for the reason the club marks are: the site has
+    to build from the repository alone. They are 96px WebP because the CDN was
+    asked for that size — see fetch.py. These are photographs of players and
+    are the league's; the credits page says so, as it does for the marks."""
+    src = CACHE / "faces"
+    if not src.exists():
+        return 0
+    out = ROOT / "site" / "public" / "faces"
+    out.mkdir(parents=True, exist_ok=True)
+    keep = set()
+    written = 0
+    for pid in sorted(ids):
+        f_in = src / f"{pid}.webp"
+        if not f_in.exists():
+            continue
+        keep.add(f"{pid}.webp")
+        dest = out / f"{pid}.webp"
+        blob = f_in.read_bytes()
+        if not dest.exists() or dest.read_bytes() != blob:
+            dest.write_bytes(blob)
+            written += 1
+    # A player who leaves the league should not leave his portrait behind.
+    for stale in out.glob("*.webp"):
+        if stale.name not in keep:
+            stale.unlink()
+            written += 1
+    return written
+
+
+def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, int]:
+    """Everyone on a roster, plus everyone who has played.
+
+    The union matters. A player who appeared in week 1 and is now on injured
+    reserve is no longer on an active roster, but his name is in a game page
+    that is already published, and a site that drops him leaves that name
+    pointing at nothing. Fifty-one players are in that position two weeks into
+    this season, and the number only goes up."""
+    roster = read_csv(CACHE / f"roster_{season}.csv")
+    weeks = read_csv(CACHE / f"stats_player_week_{season}.csv")
+    totals = read_csv(CACHE / f"stats_player_reg_{season}.csv")
+
+    by_id = {r["gsis_id"]: r for r in roster if r.get("gsis_id")}
+    played = {r["player_id"] for r in weeks if r.get("player_id")}
+    active = {p for p, r in by_id.items() if s(r, "status") == "ACT"}
+    wanted = (active | played) & set(by_id)
+
+    total_by_id = {r["player_id"]: r for r in totals}
+    weeks_by_id: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in weeks:
+        weeks_by_id[r["player_id"]].append(r)
+    snaps = snap_index(season, roster)
+    game_by_id = {g["id"]: g for g in games}
+    faces = CACHE / "faces"
+
+    index: dict[str, dict] = {}
+    written = 0
+    for pid in sorted(wanted):
+        r = by_id[pid]
+        team = s(r, "team")
+        if team not in live:
+            continue
+        stats_row = total_by_id.get(pid)
+        season_stats = all_groups(stats_row) if stats_row else {}
+        log = sorted(weeks_by_id.get(pid, []), key=lambda w: i(w, "week") or 0)
+
+        # The index carries what a list of players has to show; the detail file
+        # carries the rest. Same split as schedule.json against games/.
+        index[pid] = {
+            "id": pid,
+            "name": s(r, "full_name"),
+            "first": s(r, "first_name"),
+            "last": s(r, "last_name"),
+            "team": team,
+            "pos": s(r, "position"),
+            "group": s(stats_row, "position_group") if stats_row else None,
+            "no": i(r, "jersey_number"),
+            "status": s(r, "status"),
+            "exp": i(r, "years_exp"),
+            "games": len(log),
+            "face": (faces / f"{pid}.webp").exists(),
+            "stats": season_stats,
+        }
+
+        draft_club, draft_no = s(r, "draft_club"), i(r, "draft_number")
+        detail = {
+            "id": pid,
+            "season": season,
+            "name": s(r, "full_name"),
+            "team": team,
+            "pos": s(r, "position"),
+            "depth_pos": s(r, "depth_chart_position"),
+            "no": i(r, "jersey_number"),
+            "status": s(r, "status"),
+            "bio": {
+                "born": s(r, "birth_date"),
+                # Published in inches and pounds, and left that way: this is an
+                # American league and a reader who wants centimetres is better
+                # served by a number that matches every other source than by
+                # one this site converted.
+                "height_in": i(r, "height"),
+                "weight_lb": i(r, "weight"),
+                "college": s(r, "college"),
+                "exp": i(r, "years_exp"),
+                "rookie": i(r, "rookie_year"),
+                # No draft club is not a gap. 1,230 of these players were not
+                # drafted at all, which is a fact about them worth stating.
+                "draft": {"club": draft_club, "pick": draft_no} if draft_club else None,
+            },
+            "stats": season_stats,
+            "log": [],
+        }
+        for w in log:
+            gid = s(w, "game_id")
+            g = game_by_id.get(gid or "")
+            row = {
+                "week": i(w, "week"),
+                "game": gid,
+                "team": s(w, "team"),
+                "opp": s(w, "opponent_team"),
+                "stats": all_groups(w),
+            }
+            if g:
+                own = g["home"] if g["home"] == s(w, "team") else g["away"]
+                row["home"] = g["home"] == own
+                if g["played"]:
+                    hs, aws = g.get("home_score"), g.get("away_score")
+                    if hs is not None and aws is not None:
+                        mine, theirs = (hs, aws) if row["home"] else (aws, hs)
+                        row["pf"], row["pa"] = mine, theirs
+                        row["result"] = "W" if mine > theirs else "L" if mine < theirs else "T"
+            sn = snaps.get((pid, gid or ""))
+            if sn:
+                row["snaps"] = sn
+            detail["log"].append(row)
+
+        written += write_json(OUT / "players" / f"{pid}.json", detail)
+
+    # Anyone who has gone: a player cut in week 3 stops being emitted, and his
+    # file has to stop existing too or the site keeps serving a stale page.
+    kept = {f"{pid}.json" for pid in index}
+    for stale in (OUT / "players").glob("*.json"):
+        if stale.name not in kept:
+            stale.unlink()
+            written += 1
+
+    written += write_json(OUT / "players.json", {
+        "season": season,
+        "players": index,
+        "counts": {
+            "all": len(index),
+            "active": sum(1 for p in index.values() if p["status"] == "ACT"),
+            "played": sum(1 for p in index.values() if p["games"]),
+            "faces": sum(1 for p in index.values() if p["face"]),
+        },
+    })
+    return written, len(index)
+
+
+def emit_team_stats(season: int, live: set[str]) -> int:
+    """Each club's season to date, and its week by week, on both sides of the
+    ball. The defensive half is the opponents' offence: nflverse publishes one
+    row per club per game of what that club's offence did, so what was done to
+    them is read off their opponents' rows rather than out of a column."""
+    reg = read_csv(CACHE / f"stats_team_reg_{season}.csv")
+    wk = read_csv(CACHE / f"stats_team_week_{season}.csv")
+
+    weeks_by_team: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in wk:
+        t = s(r, "team")
+        if t in live:
+            weeks_by_team[t].append(r)
+
+    out: dict[str, dict] = {}
+    for team in sorted(live):
+        rows = sorted(weeks_by_team.get(team, []), key=lambda r: i(r, "week") or 0)
+        season_row = next((r for r in reg if s(r, "team") == team), None)
+        # What the opposition did against this club, week by week.
+        against = [r for t, rs in weeks_by_team.items() if t != team
+                   for r in rs if s(r, "opponent_team") == team]
+        out[team] = {
+            "team": team,
+            "for": all_groups(season_row) if season_row else {},
+            "against": sum_groups(against),
+            "weeks": [{
+                "week": i(r, "week"),
+                "game": s(r, "game_id"),
+                "opp": s(r, "opponent_team"),
+                "stats": all_groups(r),
+            } for r in rows],
+        }
+    return write_json(OUT / "team-stats.json", {"season": season, "teams": out})
+
+
+def sum_groups(rows: list[dict]) -> dict[str, dict]:
+    """Add up a set of weekly rows into one set of groups.
+
+    Only used for the defensive half, where there is no season-total row to
+    read — nflverse totals a club's own offence, not its opponents'."""
+    out: dict[str, dict] = {}
+    for name, spec in PLAYER_STATS.items():
+        acc: dict[str, float] = {}
+        live = False
+        for r in rows:
+            for key, col, nd in spec:
+                v = i(r, col) if nd is int else f(r, col, nd)  # type: ignore[arg-type]
+                if v is None:
+                    continue
+                acc[key] = acc.get(key, 0) + v
+                if v and key not in ("epa", "cpoe"):
+                    live = True
+        if not live:
+            continue
+        # "Longest" does not add up, and neither does a share.
+        for key, col, nd in spec:
+            if key in acc and (key in ("long", "share") or col.endswith("_pct")):
+                acc[key] = max((i(r, col) or 0) if nd is int else (f(r, col, nd) or 0) for r in rows)
+            elif key in acc and nd is int:
+                acc[key] = int(round(acc[key]))
+            elif key in acc:
+                acc[key] = round(acc[key], nd)  # type: ignore[arg-type]
+        out[name] = acc
+    return out
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -1010,7 +1388,12 @@ def main() -> int:
     written += write_json(OUT / "schedule.json", schedule)
     written += write_json(OUT / "teams.json", teams)
 
-    print(f"{len(games)} games, {len(played)} played, {len(teams)} teams")
+    written += emit_team_stats(season, live)
+    people, heads = emit_people(season, live, games)
+    written += people
+    written += emit_faces({p for p in json.loads((OUT / "players.json").read_text("utf-8"))["players"]})
+
+    print(f"{len(games)} games, {len(played)} played, {len(teams)} teams, {heads} players")
     if logos:
         print(f"{logos} club mark(s) copied to site/public/logos")
     print(f"{written} file(s) changed in {OUT.relative_to(ROOT)}")

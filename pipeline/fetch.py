@@ -25,6 +25,21 @@ WANTED = [
     ("teams", "teams_colors_logos.csv", "teams_colors_logos.csv"),
     ("pbp", "play_by_play_{season}.csv", "pbp_{season}.csv"),
     ("ftn_charting", "ftn_charting_{season}.csv", "ftn_charting_{season}.csv"),
+    # People. The roster is the register of who is on a club and what they are
+    # — the only place with a birth date, a height, a college or a draft pick.
+    # The stats files are nflverse's own aggregation of the play-by-play: the
+    # site could sum them itself, but it would be summing to a different
+    # definition than everyone else's, and a receiving yard should mean what it
+    # means everywhere. `_week` is one row per player per game, `_reg` the
+    # season to date.
+    ("rosters", "roster_{season}.csv", "roster_{season}.csv"),
+    ("stats_player", "stats_player_week_{season}.csv", "stats_player_week_{season}.csv"),
+    ("stats_player", "stats_player_reg_{season}.csv", "stats_player_reg_{season}.csv"),
+    ("stats_team", "stats_team_week_{season}.csv", "stats_team_week_{season}.csv"),
+    ("stats_team", "stats_team_reg_{season}.csv", "stats_team_reg_{season}.csv"),
+    # Who was actually on the field. The only source that counts the offensive
+    # line, who take every snap and record almost no statistics.
+    ("snap_counts", "snap_counts_{season}.csv", "snap_counts_{season}.csv"),
 ]
 
 
@@ -109,6 +124,84 @@ def league_mark() -> int:
         return 0
 
 
+def headshots(season: int) -> int:
+    """One portrait per player, at the size the site actually draws.
+
+    The roster gives a URL per player. Those URLs are Cloudinary, and the
+    published image is a 3400x2450 PNG of about 3.7 MB — 6 GB if all of them
+    were taken as published, to draw something 40px across.
+
+    Cloudinary reads its transformations out of the path, so the resizing is
+    asked of the CDN rather than done here: `w_96,h_96,c_fill,g_face` crops to
+    the face and returns 96x96, and `f_webp` returns it as WebP. That is about
+    1.4 KB each, and it keeps this pipeline free of an image library — which is
+    the same reason the club marks are left at their published size, except
+    that thirty-two marks can afford it and seventeen hundred faces cannot.
+
+    Skips anything already cached: a face does not change, and re-running this
+    every week should cost one request per player who is new to a roster."""
+    import concurrent.futures
+    import csv
+
+    src = CACHE / f"roster_{season}.csv"
+    if not src.exists():
+        print("  no roster yet — skipping headshots")
+        return 0
+    out = CACHE / "faces"
+    out.mkdir(parents=True, exist_ok=True)
+
+    want: dict[str, str] = {}
+    with src.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            pid, url = row.get("gsis_id"), row.get("headshot_url")
+            if pid and url and url != "NA":
+                want.setdefault(pid, url)
+
+    # A Cloudinary URL is {host}/image/{delivery}/{transformations}/{asset}.
+    # Published URLs already carry a transformation, so it is replaced rather
+    # than inserted. The delivery type has to be read rather than assumed: 24
+    # of these are served from /image/private/ instead of /image/upload/, and
+    # matching only the latter left them untransformed — which is to say, left
+    # them as 24 full-size PNGs totalling 95 MB.
+    def sized(url: str) -> str:
+        marker = "/image/"
+        if marker not in url:
+            return url
+        head, rest = url.split(marker, 1)
+        parts = rest.split("/")
+        if len(parts) < 3:
+            return url
+        delivery, asset = parts[0], "/".join(parts[2:])
+        return f"{head}{marker}{delivery}/f_webp,q_auto,w_96,h_96,c_fill,g_face/{asset}"
+
+    todo = [(p, u) for p, u in want.items() if not (out / f"{p}.webp").exists()]
+    if not todo:
+        print(f"  {len(want)} faces already cached")
+        return len(want)
+
+    def one(item: tuple[str, str]) -> bool:
+        pid, url = item
+        req = urllib.request.Request(sized(url), headers={"User-Agent": "nfl-analysis/0.1 (personal project)"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                blob = r.read()
+        except Exception:
+            return False
+        if not blob:
+            return False
+        (out / f"{pid}.webp").write_bytes(blob)
+        return True
+
+    got = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for ok in pool.map(one, todo):
+            got += ok
+    have = sum(1 for p in want if (out / f"{p}.webp").exists())
+    size = sum(f.stat().st_size for f in out.glob("*.webp")) / 1024 / 1024
+    print(f"  {got} new face(s), {have}/{len(want)} cached in {out.relative_to(ROOT)} ({size:.1f} MB)")
+    return have
+
+
 def main() -> int:
     season = int(sys.argv[1]) if len(sys.argv) > 1 else 2026
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -119,6 +212,7 @@ def main() -> int:
     print(f"{ok}/{len(WANTED)} downloaded to {CACHE.relative_to(ROOT)}")
     logos()
     league_mark()
+    headshots(season)
     return 0 if ok else 1
 
 
