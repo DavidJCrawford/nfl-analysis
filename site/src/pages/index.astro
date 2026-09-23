@@ -7,11 +7,15 @@
  *  actually came for.
  *
  *  Descending, so the week a reader wants is the one they land on: the week
- *  being played now, not the one played in September. Only the first two are
- *  laid out here for now — the rest follow, and the order holds. The
- *  crests are the 96px set under /logos/sm/, not the 500px originals: every
- *  club plays in both weeks, so this page holds all thirty-two of them, and the
- *  originals would be 1.7MB of PNG to draw something 48px across.
+ *  being played now, not the one played in September.
+ *
+ *  How far down the season the board runs is read off the data rather than
+ *  written here. It used to be a hand-held count, which meant that a week of
+ *  results could not land without someone also remembering to edit this file —
+ *  and the one time that is forgotten, the site quietly stops at a week it has
+ *  the games for. The crests are the 96px set under /logos/sm/, not the 500px
+ *  originals: all thirty-two clubs appear on this page, and the originals would
+ *  be 1.7MB of PNG to draw something 48px across.
  */
 import Base from '@layouts/Base.astro';
 import { getSchedule, getWeeks, getTeams, getRecords } from '@lib/data';
@@ -20,8 +24,22 @@ import { gameUrl, u } from '@lib/url';
 
 const schedule = getSchedule();
 const teams = getTeams();
-// slice() copies, so reversing it leaves the cached week list alone.
-const weeks = getWeeks().slice(0, 2).reverse();
+
+/** Every week down to the one being played, newest first.
+ *
+ *  The board ends at the first week that is not finished — the week in hand —
+ *  so it always closes on a block of fixtures a reader can still look forward
+ *  to, and never on a week that has not been scheduled into view yet.
+ *
+ *  Deliberately the first *incomplete* week and not the last played one: a
+ *  Thursday-night game does not make the week over, and keying off it would put
+ *  next week's fixtures on the front page on a Friday, three days early. When
+ *  the season finishes, every week is complete and the whole board shows.
+ *
+ *  slice() copies, so reversing it leaves the cached week list alone. */
+const all = getWeeks();
+const current = all.findIndex((w) => !w.complete);
+const weeks = all.slice(0, current === -1 ? all.length : current + 1).reverse();
 
 /** The top of each division, as it actually stands.
  *
