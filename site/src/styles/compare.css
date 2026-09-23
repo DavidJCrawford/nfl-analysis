@@ -10,12 +10,54 @@
  * colours only look like its colours against one.
  */
 
-.board {
-  border-radius: var(--ks-radius-md);
-  padding: clamp(18px, 2.6vw, 34px);
-  margin-bottom: clamp(36px, 5vw, 64px);
-  box-shadow: var(--ks-lift-2);
+/* ── The stage ────────────────────────────────────────────────────────────
+ *
+ * The replay's idea, applied to a page: a dark screen with one way out of it.
+ * It fills the viewport rather than sitting in the page as a panel — as a
+ * panel, a comparison nobody had picked yet was two inputs floating over a
+ * screenful of nothing.
+ *
+ * It fills the viewport at minimum and then grows, because the content is
+ * long: four sections of bars is more than a screen, where the replay is
+ * exactly one. So the page scrolls as a page does, and Close is fixed rather
+ * than pinned to a corner that scrolls away.
+ */
+.stage {
+  min-height: 100dvh;
   background: var(--ks-instrument-deep);
+  color: var(--ks-instrument-text);
+  --stage-pad: clamp(18px, 3vw, 40px);
+  padding: var(--stage-pad);
+  display: flex; flex-direction: column;
+}
+.stage-in { width: min(1180px, 100%); margin: 0 auto; flex: 1; display: flex; flex-direction: column; }
+
+.stage-head { padding-right: 7.5em; }
+.stage-eyebrow {
+  margin: 0; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+  text-transform: uppercase; color: var(--ks-instrument-muted);
+}
+.stage-title {
+  margin: 0.25em 0 0; color: var(--ks-instrument-text);
+  font-family: var(--ks-font-display), var(--ks-font), sans-serif;
+  font-weight: 300; font-size: clamp(1.7rem, 4.4vw, 2.6rem); line-height: 1;
+}
+
+/* The same key as the replay's, in the same corner. Fixed, because this page
+   scrolls and the replay does not. */
+.stage-close {
+  position: fixed; top: var(--stage-pad); right: var(--stage-pad); z-index: 5;
+  background: var(--ks-instrument-deep); color: var(--ks-instrument-muted);
+  border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-pill);
+  padding: 6px 16px; cursor: pointer; text-decoration: none;
+  font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.stage-close:hover { color: var(--ks-instrument-text); border-color: var(--ks-instrument-text); }
+.stage-close:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 3px; }
+
+.board {
+  flex: 1;
+  margin-top: clamp(16px, 2.4vw, 26px);
   color: var(--ks-instrument-text);
 }
 
@@ -154,3 +196,48 @@
   .ctrack.b { grid-area: tb; } .cval.right { grid-area: vb; }
   .versus { gap: 8px; }
 }
+
+
+/* ── Picking a player ─────────────────────────────────────────────────────
+ *
+ * A list of 1,743 is not a <select>, and the native <datalist> it used to be
+ * is a plain text box until you type — beside the clubs page's real dropdowns
+ * it read as a field that had failed to load. This is a proper combobox: a
+ * chevron so it looks like something that opens, and a list that opens on
+ * focus showing faces, so what you are choosing between is people.
+ */
+.combo { position: relative; }
+.combo::after {
+  content: ''; position: absolute; right: 11px; top: 50%; width: 7px; height: 7px;
+  margin-top: -5px; pointer-events: none;
+  border-right: 1.5px solid var(--ks-instrument-muted);
+  border-bottom: 1.5px solid var(--ks-instrument-muted);
+  transform: rotate(45deg);
+}
+.combo input { padding-right: 28px; }
+
+.sug {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  margin: 0; padding: 4px; list-style: none;
+  max-height: 46vh; overflow-y: auto;
+  background: var(--ks-instrument-raised);
+  border: 1px solid var(--ks-instrument-rule); border-radius: 8px;
+  box-shadow: var(--ks-lift-2);
+}
+.sug[hidden] { display: none; }
+.sug li {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px;
+  padding: 6px 8px; border-radius: 5px; cursor: pointer;
+}
+.sug li[aria-selected='true'], .sug li:hover { background: var(--ks-instrument-deep); }
+.sug .sface {
+  width: 28px; height: 28px; border-radius: 50%;
+  object-fit: cover; object-position: center top;
+  background: var(--ks-instrument-deep);
+}
+.sug .sname {
+  font-size: var(--ks-type-ui-size); color: var(--ks-instrument-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sug .ssub { font-size: var(--ks-type-eyebrow-size); color: var(--ks-instrument-muted); white-space: nowrap; }
+.sug .snone { display: block; padding: 8px; color: var(--ks-instrument-muted); font-size: var(--ks-type-ui-size); }

@@ -41,23 +41,42 @@ def main() -> int:
         if rel.endswith("index.html"):
             served.add("/" + rel[: -len("index.html")])
 
-    # The site is served under a base path, which is baked into every href.
-    # Strip it before matching rather than guessing at it.
-    sample = pages[0].read_text(encoding="utf-8")
+    # Read every page once; the base path is worked out from all of them
+    # together, and the same hrefs are then checked.
+    found: list[tuple[str, list[str]]] = []
+    for page in pages:
+        found.append((page.relative_to(dist).as_posix(),
+                      [h for h in HREF.findall(page.read_text(encoding="utf-8"))
+                       if h.startswith("/")]))
+
+    # The site is served under a base path, which is baked into every href but
+    # is not part of dist's own layout, so it has to be recognised rather than
+    # read. The first path segment that (a) nearly every internal link starts
+    # with and (b) is not a real directory in the build is it.
+    #
+    # This used to be taken from a regex over the first page in the build,
+    # which worked until the first page in the build was one without a
+    # masthead on it — the two comparison screens deliberately have none, they
+    # sort before everything else, and with no `/nfl-analysis/` link on them
+    # the base came back empty and all 38,279 internal links were reported
+    # dead at once. A signal drawn from one arbitrary page is not a signal.
+    seg: collections.Counter[str] = collections.Counter()
+    for _, hrefs in found:
+        for href in hrefs:
+            parts = href.split("#")[0].split("?")[0].split("/")
+            if len(parts) > 1 and parts[1]:
+                seg[parts[1]] += 1
     base = ""
-    if (m := re.search(r'href="(/[^"/]+)/(?:index\.html)?"', sample)):
-        candidate = m.group(1)
-        if not (dist / candidate.lstrip("/")).exists():
-            base = candidate
+    if seg:
+        first, hits = seg.most_common(1)[0]
+        total = sum(seg.values())
+        if hits > total * 0.5 and not (dist / first).exists():
+            base = "/" + first
 
     broken: collections.Counter[tuple[str, str]] = collections.Counter()
     internal = 0
-    for page in pages:
-        html = page.read_text(encoding="utf-8")
-        src = page.relative_to(dist).as_posix()
-        for href in HREF.findall(html):
-            if not href.startswith("/"):
-                continue          # external, anchor, or data: URI
+    for src, hrefs in found:
+        for href in hrefs:
             internal += 1
             target = href.split("#")[0].split("?")[0]
             if base and target.startswith(base):

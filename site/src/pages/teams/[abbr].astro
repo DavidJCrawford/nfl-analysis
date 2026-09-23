@@ -127,6 +127,7 @@ const STATUS: Record<string, string> = {
         <span class="place">{team.name.replace(` ${team.nick}`, '')}</span>
         <span class="nick">{team.nick}</span>
       </h1>
+      <CompareDialog kind="team" id={abbr} name={team.nick} />
     </div>
 
     <div class="stats">
@@ -134,10 +135,6 @@ const STATUS: Record<string, string> = {
       <Stat label="Points for" value={pointsFor} />
       <Stat label="Points against" value={pointsAgainst} />
       <Stat label="Differential" value={signed(pointsFor - pointsAgainst)} />
-    </div>
-
-    <div class="actions">
-      <CompareDialog kind="team" id={abbr} name={team.nick} />
     </div>
 
     <p class="lead measure" style="margin-top:28px">
@@ -281,9 +278,11 @@ const STATUS: Record<string, string> = {
     max-width: 760px;
   }
   .headline { margin-top: 0.2em; }
-  /* Right-aligned above the prose, the way the replay's own button sits above
-     the strip it opens. */
-  .actions { display: flex; justify-content: flex-end; margin-top: clamp(18px, 2.2vw, 26px); }
+  /* On the title row, at the far edge, level with the club's own name. It
+     used to sit under the stat row, which is capped at 760px — so on a wide
+     screen it stood alone in the empty quarter of the page with nothing to
+     belong to. */
+  .titling :global(.compare-open) { margin-left: auto; align-self: center; }
 
   .weeks { list-style: none; margin: 28px 0 0; padding: 0; max-width: 780px; }
   .week { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--ks-rule); }

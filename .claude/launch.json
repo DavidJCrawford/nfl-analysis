@@ -4,9 +4,13 @@
     {
       "name": "site",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "4331"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 4331,
-      "cwd": "site"
+      "cwd": "site",
+      "autoPort": true
     }
   ]
 }

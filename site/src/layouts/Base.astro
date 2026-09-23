@@ -3,8 +3,19 @@ import { Font } from 'astro:assets';
 import { u } from '@lib/url';
 import '@styles/base.css';
 
-interface Props { title: string; description?: string; }
-const { title, description = 'The NFL season, game by game — one permanent page each.' } = Astro.props;
+interface Props {
+  title: string;
+  description?: string;
+  /** No masthead. For a page that is a screen rather than a document — the
+   *  comparison boards, which are the replay's idea applied to two seasons:
+   *  a dark stage with one way out of it, in the top right corner. */
+  bare?: boolean;
+}
+const {
+  title,
+  description = 'The NFL season, game by game — one permanent page each.',
+  bare = false,
+} = Astro.props;
 
 const NAV = [
   { href: '/teams/', label: 'Teams' },
@@ -27,6 +38,7 @@ const path = Astro.url.pathname;
   <body>
     <a class="skip" href="#main">Skip to content</a>
 
+    {!bare && (
     <header class="masthead">
       <div class="wrap masthead-inner">
         <a class="wordmark plain" href={u('/')}>
@@ -45,6 +57,7 @@ const path = Astro.url.pathname;
       </div>
       <hr class="rule" />
     </header>
+    )}
 
     <main id="main"><slot /></main>
   </body>

@@ -85,6 +85,7 @@ const title = p.name;
         </p>
       </div>
       {p.no != null && <span class="jersey num" aria-label={`Number ${p.no}`}>{p.no}</span>}
+      <CompareDialog kind="player" id={p.id} name={p.name} pos={p.depth_pos ?? p.pos} />
     </div>
 
     {lead ? (
@@ -104,10 +105,6 @@ const title = p.name;
       </p>
     )}
   </header>
-
-  <div class="wrap actions">
-    <CompareDialog kind="player" id={p.id} name={p.name} pos={p.depth_pos ?? p.pos} />
-  </div>
 
   <hr class="rule" />
 
@@ -228,7 +225,7 @@ const title = p.name;
   /* The number is the player's own mark, so it sits at the far edge rather
      than beside the name, as the racing number does on the sibling site. */
   .jersey {
-    margin-left: auto; flex: none;
+    margin-left: auto; flex: none; order: 1;
     font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 200;
     color: var(--ks-gray-2); line-height: 1;
   }
@@ -241,7 +238,10 @@ const title = p.name;
     max-width: 820px;
   }
   .noplay { margin-top: clamp(20px, 3vw, 32px); }
-  .actions { display: flex; justify-content: flex-end; padding-bottom: clamp(18px, 2.4vw, 28px); }
+  /* Beside the jersey number at the end of the name row. The number keeps the
+     far edge — it is the player's own mark — and the button sits just inside
+     it. */
+  .titling :global(.compare-open) { flex: none; align-self: center; order: 2; margin-left: clamp(12px, 2vw, 22px); }
 
   .two-up {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));

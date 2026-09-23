@@ -27,6 +27,14 @@ export default defineConfig({
      whitespace costs 33K gzipped across all 308 pages, around 107 bytes each. */
   compressHTML: false,
   build: { format: 'directory' },
+
+  /* The dev server takes whatever port it is handed. Astro reads `--port` and
+     this config but not the PORT environment variable, so a harness that
+     assigns a free port has no way to say so without it — and the launch
+     config was pinned to 4331 instead, which collides with any dev server
+     still running from an earlier session. One did: six days old, and exactly
+     the stale-serving process HANDOFF §4 is about. */
+  server: { port: Number(process.env.PORT) || 4331 },
   prefetch: { prefetchAll: true, defaultStrategy: 'hover' },
   devToolbar: { enabled: false },
 

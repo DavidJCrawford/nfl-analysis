@@ -132,10 +132,17 @@ a passing chart, and the site should not imply otherwise.
                         week by week, and its squad
 /players/               The league's leaders, then every name
 /players/00-0033873/    One player: his life, his season, his games
-/compare/teams/?a=&b=   Two clubs, side by side
+/compare/teams/?a=&b=   Two clubs, side by side — a screen, not a document
 /compare/players/?a=&b= Two players, side by side
 /credits/               Sources and terms
 ```
+
+Both are built as the replay is: a dark stage filling the viewport with one way
+out of it, in the top right corner. They are screens rather than documents, so
+they carry no masthead — Close goes back where the reader came from, and to the
+first subject's own page when they arrived by a shared link. As a panel sitting
+in an ordinary page, a comparison nobody had picked yet was two inputs floating
+over a screenful of nothing.
 
 The two comparison pages are the only addresses on the site that carry a query
 string, and the only pages drawn in the browser. A pair cannot be a page: 32

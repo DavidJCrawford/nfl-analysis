@@ -19,40 +19,43 @@ import '@styles/compare.css';
 const teams = getTeams();
 const order = getTeamOrder();
 ---
-<Base title="Compare clubs" description="Two NFL clubs' seasons side by side — offence, defence and discipline.">
-  <div class="wrap section intro">
-    <p class="eyebrow">Season side by side</p>
-    <h1 class="headline" style="margin-top:.2em">Compare clubs</h1>
-  </div>
+<Base title="Compare clubs" description="Two NFL clubs' seasons side by side — offence, defence and discipline." bare>
+  <div class="stage">
+    <a class="stage-close" href={u('/teams/')} data-close>Close</a>
+    <div class="stage-in">
+      <header class="stage-head">
+        <p class="stage-eyebrow">Season side by side</p>
+        <h1 class="stage-title">Compare clubs</h1>
+      </header>
 
-  <div class="wrap">
-    <div class="board instrument" data-compare>
-      <form class="picker" data-picker>
-        <label class="pick">
-          <span class="plabel">First club</span>
-          <select name="a" data-a>
-            {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
-          </select>
-        </label>
-        <button class="swap" type="button" data-swap aria-label="Swap the two clubs">⇄</button>
-        <label class="pick">
-          <span class="plabel">Second club</span>
-          <select name="b" data-b>
-            {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
-          </select>
-        </label>
-        <button class="go" type="submit">Compare</button>
-      </form>
+      <div class="board" data-compare>
+        <form class="picker" data-picker>
+          <label class="pick">
+            <span class="plabel">First club</span>
+            <select name="a" data-a>
+              {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
+            </select>
+          </label>
+          <button class="swap" type="button" data-swap aria-label="Swap the two clubs">⇄</button>
+          <label class="pick">
+            <span class="plabel">Second club</span>
+            <select name="b" data-b>
+              {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
+            </select>
+          </label>
+          <button class="go" type="submit">Compare</button>
+        </form>
 
-      <div data-head></div>
-      <div data-rows></div>
-      <p class="state" data-state>Pick two clubs.</p>
+        <div data-head></div>
+        <div data-rows></div>
+        <p class="state" data-state>Pick two clubs.</p>
+      </div>
     </div>
   </div>
 
   <noscript>
-    <div class="wrap section">
-      <p class="lead measure">
+    <div class="stage">
+      <p class="state">
         This comparison is drawn in the browser, which is the one thing on this
         site that is. Every club's own numbers are on its page —
         <a href={u('/teams/')}>the clubs are here</a>.
@@ -115,6 +118,16 @@ const order = getTeamOrder();
     head.replaceChildren(wrap);
   }
 
+  const close = document.querySelector<HTMLAnchorElement>('[data-close]')!;
+  close.addEventListener('click', (e) => {
+    // Back, when there is a back on this site to go to — a reader who opened
+    // this from a club page expects to land on it again, not on the index.
+    if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) {
+      e.preventDefault();
+      history.back();
+    }
+  });
+
   function paint(ka: string, kb: string): void {
     if (!data) return;
     const a = data[ka], b = data[kb];
@@ -132,6 +145,7 @@ const order = getTeamOrder();
     const [ca, cb] = pickColours(a.color, a.color2, b.color, b.color2);
     header(a, b, ca, cb);
     rows.replaceChildren(drawSections(clubSections(a, b), ca, cb));
+    close.href = u(`/teams/${a.abbr}/`);
     document.title = `${a.nick} v ${b.nick} · NFL Analysis`;
   }
 
@@ -171,7 +185,6 @@ const order = getTeamOrder();
 </script>
 
 <style>
-  /* Everything else is in src/styles/compare.css, which is global because the
+  /* The whole screen is in src/styles/compare.css, which is global because the
      board is built by the script above and carries no scope attribute. */
-  .intro { padding-bottom: clamp(12px, 1.6vw, 20px); }
 </style>

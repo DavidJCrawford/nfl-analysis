@@ -4,11 +4,11 @@
  *  The pair is in the query string and the numbers are fetched, because this
  *  is the comparison that cannot be pre-rendered: 1,743 players make
  *  1.5 million pairs, and holding them to matching positions still leaves
- *  about 198,000 pages.
+ *  about 198,000.
  *
  *  Only the statistics both men have are drawn. A quarterback and a
  *  cornerback share none, and 412 passing yards set against a blank is not a
- *  comparison — the page says so and offers the obvious alternative instead.
+ *  comparison — the page says so and names what each of them has instead.
  */
 import Base from '@layouts/Base.astro';
 import { getTeams } from '@lib/data';
@@ -22,38 +22,49 @@ const palette = Object.fromEntries(
   Object.entries(teams).map(([a, t]) => [a, [t.color, t.color2, t.nick]]),
 );
 ---
-<Base title="Compare players" description="Two NFL players' seasons side by side.">
-  <div class="wrap section intro">
-    <p class="eyebrow">Season side by side</p>
-    <h1 class="headline" style="margin-top:.2em">Compare players</h1>
-  </div>
+<Base title="Compare players" description="Two NFL players' seasons side by side." bare>
+  <div class="stage">
+    <a class="stage-close" href={u('/players/')} data-close>Close</a>
+    <div class="stage-in">
+      <header class="stage-head">
+        <p class="stage-eyebrow">Season side by side</p>
+        <h1 class="stage-title">Compare players</h1>
+      </header>
 
-  <div class="wrap">
-    <div class="board" data-compare data-palette={JSON.stringify(palette)}>
-      <form class="picker" data-picker>
-        <label class="pick">
-          <span class="plabel">First player</span>
-          <input name="a" data-a list="who-a" autocomplete="off" placeholder="Start typing a name" />
-          <datalist id="who-a"></datalist>
-        </label>
-        <button class="swap" type="button" data-swap aria-label="Swap the two players">⇄</button>
-        <label class="pick">
-          <span class="plabel">Second player</span>
-          <input name="b" data-b list="who-b" autocomplete="off" placeholder="Start typing a name" />
-          <datalist id="who-b"></datalist>
-        </label>
-        <button class="go" type="submit">Compare</button>
-      </form>
+      <div class="board" data-compare data-palette={JSON.stringify(palette)}>
+        <form class="picker" data-picker>
+          <div class="pick">
+            <span class="plabel" id="lab-a">First player</span>
+            <div class="combo">
+              <input data-a role="combobox" aria-autocomplete="list" aria-expanded="false"
+                     aria-controls="sug-a" aria-labelledby="lab-a"
+                     autocomplete="off" placeholder="Start typing a name" />
+              <ul class="sug" id="sug-a" role="listbox" aria-label="Players" hidden></ul>
+            </div>
+          </div>
+          <button class="swap" type="button" data-swap aria-label="Swap the two players">⇄</button>
+          <div class="pick">
+            <span class="plabel" id="lab-b">Second player</span>
+            <div class="combo">
+              <input data-b role="combobox" aria-autocomplete="list" aria-expanded="false"
+                     aria-controls="sug-b" aria-labelledby="lab-b"
+                     autocomplete="off" placeholder="Start typing a name" />
+              <ul class="sug" id="sug-b" role="listbox" aria-label="Players" hidden></ul>
+            </div>
+          </div>
+          <button class="go" type="submit">Compare</button>
+        </form>
 
-      <div data-head></div>
-      <div data-rows></div>
-      <p class="state" data-state>Loading the squads…</p>
+        <div data-head></div>
+        <div data-rows></div>
+        <p class="state" data-state>Loading the squads…</p>
+      </div>
     </div>
   </div>
 
   <noscript>
-    <div class="wrap section">
-      <p class="lead measure">
+    <div class="stage">
+      <p class="state">
         This comparison is drawn in the browser, which is the one thing on this
         site that is. Every player's own numbers are on his page —
         <a href={u('/players/')}>the players are here</a>.
@@ -69,29 +80,130 @@ const palette = Object.fromEntries(
   const board = document.querySelector<HTMLElement>('[data-compare]')!;
   const palette: Record<string, [string, string, string]> = JSON.parse(board.dataset.palette || '{}');
   const form = board.querySelector<HTMLFormElement>('[data-picker]')!;
-  const inA = board.querySelector<HTMLInputElement>('[data-a]')!;
-  const inB = board.querySelector<HTMLInputElement>('[data-b]')!;
-  const listA = board.querySelector<HTMLDataListElement>('#who-a')!;
-  const listB = board.querySelector<HTMLDataListElement>('#who-b')!;
   const head = board.querySelector<HTMLElement>('[data-head]')!;
   const rows = board.querySelector<HTMLElement>('[data-rows]')!;
   const state = board.querySelector<HTMLElement>('[data-state]')!;
+  const close = document.querySelector<HTMLAnchorElement>('[data-close]')!;
 
   let people: Record<string, any> = {};
-  /** "Patrick Mahomes (KC, QB)" -> id. What the datalist offers and what a
-   *  typed entry is matched against, since a name alone is not unique —
-   *  the league has several Josh Allens. */
-  let byLabel = new Map<string, string>();
+  let sorted: any[] = [];
 
-  const label = (p: any) => `${p.name} (${p.team}${p.pos ? `, ${p.pos}` : ''})`;
+  close.addEventListener('click', (e) => {
+    // Back, when there is a back on this site to go to — a reader who opened
+    // this from a player's page expects to land on it again.
+    if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) {
+      e.preventDefault();
+      history.back();
+    }
+  });
 
-  function fillLists(): void {
-    const opts = Object.values(people)
-      .sort((x: any, y: any) => x.name.localeCompare(y.name))
-      .map((p: any) => { const o = document.createElement('option'); o.value = label(p); return o; });
-    listA.replaceChildren(...opts.map((o) => o.cloneNode() as HTMLOptionElement));
-    listB.replaceChildren(...opts);
+  /* ── The combobox ──────────────────────────────────────────────────────────
+     Built rather than borrowed. A <select> of 1,743 is unusable and the native
+     <datalist> this replaced is an ordinary text box until you type — next to
+     the clubs page's real dropdowns it read as a field that had failed. This
+     opens on focus, shows faces, and answers the arrow keys. */
+  function combobox(input: HTMLInputElement, list: HTMLUListElement, onPick: () => void) {
+    let hits: any[] = [];
+    let at = -1;
+    let chosen: string | null = null;
+
+    const shut = () => {
+      list.hidden = true; at = -1;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    };
+
+    function row(p: any, n: number): HTMLLIElement {
+      const li = document.createElement('li');
+      li.id = `${list.id}-${n}`;
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', String(n === at));
+      if (p.face) {
+        const img = document.createElement('img');
+        img.className = 'sface'; img.src = u(`/faces/${p.id}.webp`);
+        img.alt = ''; img.width = 28; img.height = 28; img.loading = 'lazy';
+        li.append(img);
+      } else {
+        const s = document.createElement('span'); s.className = 'sface'; li.append(s);
+      }
+      const nm = document.createElement('span');
+      nm.className = 'sname'; nm.textContent = p.name;
+      const sub = document.createElement('span');
+      sub.className = 'ssub';
+      sub.textContent = `${palette[p.team]?.[2] ?? p.team}${p.pos ? ` · ${p.pos}` : ''}`;
+      li.append(nm, sub);
+      // mousedown, not click: blur fires first on click and would shut the
+      // list out from under the pointer.
+      li.addEventListener('mousedown', (e) => { e.preventDefault(); take(n); });
+      return li;
+    }
+
+    function open(): void {
+      const q = input.value.trim().toLowerCase();
+      hits = (q
+        ? sorted.filter((p) => p.name.toLowerCase().includes(q)
+            || p.team.toLowerCase() === q || (p.pos ?? '').toLowerCase() === q)
+        : sorted).slice(0, 40);
+      if (!hits.length) {
+        const li = document.createElement('li');
+        li.className = 'snone'; li.textContent = 'Nobody by that name.';
+        list.replaceChildren(li);
+      } else {
+        list.replaceChildren(...hits.map(row));
+      }
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function mark(): void {
+      [...list.children].forEach((li, n) => li.setAttribute('aria-selected', String(n === at)));
+      const el = list.children[at] as HTMLElement | undefined;
+      if (el) { el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', el.id); }
+    }
+
+    function take(n: number): void {
+      const p = hits[n];
+      if (!p) return;
+      chosen = p.id;
+      input.value = p.name;
+      shut();
+      onPick();
+    }
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => { chosen = null; open(); });
+    input.addEventListener('blur', () => setTimeout(shut, 120));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (list.hidden) return open();
+        at = e.key === 'ArrowDown'
+          ? Math.min(at + 1, hits.length - 1)
+          : Math.max(at - 1, 0);
+        mark();
+      } else if (e.key === 'Enter') {
+        if (!list.hidden && at >= 0) { e.preventDefault(); take(at); }
+      } else if (e.key === 'Escape') {
+        shut();
+      }
+    });
+
+    return {
+      /** The id, if one was picked from the list; otherwise whatever an
+       *  unambiguous name match gives. */
+      id(): string | null {
+        if (chosen) return chosen;
+        const v = input.value.trim().toLowerCase();
+        if (!v) return null;
+        const exact = sorted.filter((p) => p.name.toLowerCase() === v);
+        return exact.length === 1 ? exact[0].id : null;
+      },
+      set(p: any) { chosen = p.id; input.value = p.name; },
+    };
   }
+
+  const boxA = combobox(board.querySelector('[data-a]')!, board.querySelector('#sug-a')!, () => {});
+  const boxB = combobox(board.querySelector('[data-b]')!, board.querySelector('#sug-b')!, () => {});
 
   function side(p: any, which: 'a' | 'b', colour: string): HTMLAnchorElement {
     const box = document.createElement('a');
@@ -114,8 +226,7 @@ const palette = Object.fromEntries(
     const text = document.createElement('span');
     text.className = 'wtext';
     const nm = document.createElement('span');
-    nm.className = 'wnick';
-    nm.textContent = p.name;
+    nm.className = 'wnick'; nm.textContent = p.name;
     const sub = document.createElement('span');
     sub.className = 'wsub';
     const club = palette[p.team]?.[2] ?? p.team;
@@ -144,7 +255,7 @@ const palette = Object.fromEntries(
       head.replaceChildren(); rows.replaceChildren();
       state.textContent = 'That is the same player twice. Pick another.'; state.hidden = false; return;
     }
-    inA.value = label(a); inB.value = label(b);
+    boxA.set(a); boxB.set(b);
     const [ca, cb] = colours(a, b);
 
     const wrap = document.createElement('div');
@@ -158,7 +269,7 @@ const palette = Object.fromEntries(
     if (!shared.length) {
       rows.replaceChildren();
       // Honest rather than empty: these two genuinely have no number in
-      // common, and the page should say which kind of number each of them has.
+      // common, and the page should say what kind each of them has.
       const say = (p: any) => {
         const g = Object.keys(p.stats);
         return g.length ? g.join(', ') : 'nothing recorded yet';
@@ -172,16 +283,9 @@ const palette = Object.fromEntries(
       state.hidden = true;
       rows.replaceChildren(drawSections(personSections(a, b), ca, cb));
     }
+    close.href = u(`/players/${a.id}/`);
     document.title = `${a.name} v ${b.name} · NFL Analysis`;
   }
-
-  const idOf = (raw: string): string | null => {
-    const v = raw.trim();
-    if (people[v]) return v;                        // already an id
-    if (byLabel.has(v)) return byLabel.get(v)!;
-    const hit = Object.values(people).find((p: any) => p.name.toLowerCase() === v.toLowerCase());
-    return hit ? (hit as any).id : null;
-  };
 
   function fromUrl(): [string, string] | null {
     const q = new URLSearchParams(location.search);
@@ -196,17 +300,15 @@ const palette = Object.fromEntries(
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const a = idOf(inA.value), b = idOf(inB.value);
+    const a = boxA.id(), b = boxB.id();
     if (!a || !b) {
-      state.textContent = 'Pick both names from the list.';
-      state.hidden = false;
-      return;
+      state.textContent = 'Pick both names from the list.'; state.hidden = false; return;
     }
     go(a, b);
   });
   board.querySelector('[data-swap]')!.addEventListener('click', () => {
-    const a = idOf(inA.value), b = idOf(inB.value);
-    if (a && b) go(b, a); else { const v = inA.value; inA.value = inB.value; inB.value = v; }
+    const a = boxA.id(), b = boxB.id();
+    if (a && b) go(b, a);
   });
   addEventListener('popstate', () => { const p = fromUrl(); if (p) paint(p[0], p[1]); });
 
@@ -218,8 +320,8 @@ const palette = Object.fromEntries(
       state.textContent = 'The numbers could not be loaded.';
       return;
     }
-    byLabel = new Map(Object.values(people).map((p: any) => [label(p), p.id]));
-    fillLists();
+    // Busiest first, so an empty box opens on people somebody might want.
+    sorted = Object.values(people).sort((x: any, y: any) => y.games - x.games || x.name.localeCompare(y.name));
     const pair = fromUrl();
     if (pair) go(pair[0], pair[1], false);
     else { state.textContent = 'Pick two players.'; state.hidden = false; }
@@ -227,7 +329,6 @@ const palette = Object.fromEntries(
 </script>
 
 <style>
-  /* The rest is in src/styles/compare.css — global, because the board is built
-     by the script above and carries no scope attribute. */
-  .intro { padding-bottom: clamp(12px, 1.6vw, 20px); }
+  /* The whole screen is in src/styles/compare.css, which is global because the
+     board is built by the script above and carries no scope attribute. */
 </style>

@@ -257,6 +257,15 @@ selector on an element that *is* in the template and put `:global()` around
 the rest — `.cd-list :global(.cd-item)` — or put the rules in a plain
 stylesheet, which is what `src/styles/compare.css` is for.
 
+**check_site.py used to read the base path off one arbitrary page.** It took
+the first `href="/xxx/"` it found in `pages[0]`, and `pages[0]` is whatever
+sorts first — which became `compare/players/index.html`, a page deliberately
+built without a masthead. With no `/nfl-analysis/` link on it the base came
+back empty and all 38,279 internal links were reported dead in one go. It now
+counts the first path segment across every internal href on the site and takes
+the one that dominates and is not a real directory in the build. A signal
+drawn from one arbitrary page is not a signal.
+
 ## 5. What to do next, and what to be careful of
 
 In rough order of value:
