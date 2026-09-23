@@ -1,0 +1,171 @@
+---
+/** Everybody, two ways.
+ *
+ *  The sibling F1 site lists its drivers in one table, because there are
+ *  twenty of them and a table of twenty is a page. There are 1,743 people
+ *  here, and the same design would be a phone book with three thousand
+ *  portraits in it — about 3 MB of images to show a list nobody reads top to
+ *  bottom.
+ *
+ *  So it is split by what a reader is actually here for. If they want to know
+ *  who is leading the league at something, that is the top of the page, with
+ *  faces, and it is short. If they want one particular player, that is the
+ *  directory underneath — every name, no images, and indexed by the site
+ *  search. A club's full squad belongs on the club's own page, which is where
+ *  a squad is a squad rather than a slice of an alphabet.
+ */
+import Base from '@layouts/Base.astro';
+import Face from '@components/people/Face.astro';
+import { getPlayerIndex, getPlayers, getTeams, tackles } from '@lib/data';
+import { show } from '@lib/stats';
+import { u } from '@lib/url';
+import type { PlayerEntry } from '@lib/types';
+
+const index = getPlayerIndex();
+const all = getPlayers();
+const teams = getTeams();
+
+interface Board { title: string; note: string; value: (p: PlayerEntry) => number; write: (n: number) => string; }
+
+const YDS = (n: number) => `${n.toLocaleString('en-GB')} yds`;
+const BOARDS: Board[] = [
+  { title: 'Passing yards', note: 'Through the air', value: (p) => p.stats.passing?.yards ?? 0, write: YDS },
+  { title: 'Rushing yards', note: 'On the ground', value: (p) => p.stats.rushing?.yards ?? 0, write: YDS },
+  { title: 'Receiving yards', note: 'Caught', value: (p) => p.stats.receiving?.yards ?? 0, write: YDS },
+  { title: 'Touchdowns', note: 'Scored, any way',
+    value: (p) => (p.stats.rushing?.td ?? 0) + (p.stats.receiving?.td ?? 0) + (p.stats.defence?.td ?? 0),
+    write: (n) => `${n} TD` },
+  // Solo and assisted together, as every scoreboard counts them.
+  { title: 'Tackles', note: 'Solo and assisted', value: (p) => tackles(p.stats), write: (n) => `${n}` },
+  { title: 'Sacks', note: 'On the quarterback', value: (p) => p.stats.defence?.sacks ?? 0,
+    write: (n) => show(n, 'dec') },
+];
+
+const boards = BOARDS.map((b) => ({
+  ...b,
+  top: all.filter((p) => b.value(p) > 0)
+          .sort((x, y) => b.value(y) - b.value(x) || x.name.localeCompare(y.name))
+          .slice(0, 5),
+}));
+
+/** The directory, by surname. Everyone, including the four hundred who have
+ *  not played — a squad is who is there, not who happened to get on. */
+const directory = [...all].sort((a, b) =>
+  (a.last ?? a.name).localeCompare(b.last ?? b.name) || a.name.localeCompare(b.name));
+
+const letters = [...new Set(directory.map((p) => (p.last ?? p.name)[0]!.toUpperCase()))].sort();
+---
+<Base title="Players" description={`Every player on an NFL roster in ${index.season}, and what they have done so far.`}>
+  <div class="wrap section intro" data-pagefind-body>
+    <p class="eyebrow">Season {index.season}</p>
+    <h1 class="headline" style="margin-top:.2em">Players</h1>
+    <p class="lead measure" style="margin-top:1em">
+      {index.counts.all.toLocaleString('en-GB')} people on a roster, of whom
+      {' '}{index.counts.played.toLocaleString('en-GB')} have recorded something
+      so far. A club's full squad is on the club's own page.
+    </p>
+  </div>
+
+  <div class="wrap section boards">
+    {boards.map((b) => (
+      <section class="board">
+        <header class="bhead">
+          <h2 class="btitle">{b.title}</h2>
+          <p class="bnote">{b.note}</p>
+        </header>
+        <ol class="rank">
+          {b.top.map((p, n) => (
+            <li>
+              <a class="plain row" href={u(`/players/${p.id}/`)}>
+                <span class="pos num">{n + 1}</span>
+                <Face id={p.id} name={p.name} face={p.face} size={34} />
+                <span class="nm">
+                  <span class="full">{p.name}</span>
+                  <span class="sub">
+                    <img src={u(`/logos/sm/${p.team}.webp`)} alt="" width="14" height="14" />
+                    {teams[p.team]?.nick ?? p.team}{(p.depth_pos ?? p.pos) && <> · {p.depth_pos ?? p.pos}</>}
+                  </span>
+                </span>
+                <span class="val num">{b.write(b.value(p))}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+  </div>
+
+  <div class="wrap section">
+    <h2 class="headline">Everyone</h2>
+    <p class="ui muted" style="margin-top:.6em">
+      {directory.length.toLocaleString('en-GB')} players, by surname.
+    </p>
+    <nav class="alpha" aria-label="Jump to a letter">
+      {letters.map((l) => <a href={`#letter-${l}`}>{l}</a>)}
+    </nav>
+
+    {letters.map((l) => (
+      <section class="letter">
+        <h3 id={`letter-${l}`} class="lmark">{l}</h3>
+        <ul class="names">
+          {directory.filter((p) => (p.last ?? p.name)[0]!.toUpperCase() === l).map((p) => (
+            <li>
+              <a href={u(`/players/${p.id}/`)}>{p.name}</a>
+              <span class="meta">{p.depth_pos ?? p.pos ?? '—'} · {p.team}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </div>
+</Base>
+
+<style>
+  .intro { padding-bottom: clamp(14px, 2vw, 24px); }
+
+  .boards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: clamp(22px, 3vw, 44px);
+    padding-top: clamp(10px, 1.4vw, 18px);
+  }
+  .bhead { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--ks-rule); }
+  .btitle { margin: 0; font-size: var(--ks-type-title-size); font-weight: 600; color: var(--ks-ink); }
+  .bnote { margin: 0 0 0 auto; font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep);
+           text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .rank { list-style: none; margin: 10px 0 0; padding: 0; }
+  .rank .row {
+    display: grid; grid-template-columns: 1.4em auto 1fr auto; align-items: center; gap: 11px;
+    padding: 7px 0; border: 0;
+  }
+  .rank li + li { border-top: 1px solid var(--ks-rule); }
+  .rank .row:hover .full { color: var(--ks-kinpaku); }
+  .pos { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); text-align: right; }
+  .nm { display: flex; flex-direction: column; min-width: 0; }
+  .full { font-size: var(--ks-type-ui-size); color: var(--ks-ink); white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis; }
+  .sub { display: flex; align-items: center; gap: 5px; font-size: var(--ks-type-eyebrow-size);
+         color: var(--ks-text-mute-deep); margin-top: 1px; }
+  .val { font-size: var(--ks-type-ui-size); color: var(--ks-ink); white-space: nowrap;
+         font-variant-numeric: var(--f1-numeric); }
+
+  .alpha { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 18px 0 0;
+           padding-bottom: 14px; border-bottom: 1px solid var(--ks-rule); }
+  .alpha a { font-size: var(--ks-type-ui-size); border: 0; color: var(--ks-text-muted); }
+  .alpha a:hover { color: var(--ks-kinpaku); }
+
+  .letter { margin-top: clamp(22px, 3vw, 34px); }
+  .lmark {
+    margin: 0 0 8px; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-text-muted);
+    padding-bottom: 6px; border-bottom: 1px solid var(--ks-rule);
+  }
+  /* No portraits down here on purpose: 1,743 of them is 3 MB. */
+  .names { list-style: none; margin: 0; padding: 0;
+           columns: 4 210px; column-gap: clamp(16px, 2.4vw, 34px); }
+  .names li { break-inside: avoid; display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .names a { font-size: var(--ks-type-ui-size); border: 0; }
+  .names a:hover { color: var(--ks-kinpaku); }
+  .meta { margin-left: auto; font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep);
+          white-space: nowrap; font-variant-numeric: var(--f1-numeric); }
+</style>

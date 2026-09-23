@@ -1163,7 +1163,13 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
             "first": s(r, "first_name"),
             "last": s(r, "last_name"),
             "team": team,
+            # Two positions, deliberately. `pos` is the roster's own coarse
+            # grouping and has exactly eleven values, which is what a squad
+            # list groups by. `depth_pos` is the club's depth-chart
+            # designation — cornerback rather than defensive back — which is
+            # what a reader wants to see written down.
             "pos": s(r, "position"),
+            "depth_pos": s(r, "depth_chart_position"),
             "group": s(stats_row, "position_group") if stats_row else None,
             "no": i(r, "jersey_number"),
             "status": s(r, "status"),

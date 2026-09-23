@@ -1,0 +1,261 @@
+---
+/** One player: who he is, what he has done this season, and every game of it.
+ *
+ *  Built on the same bones as the sibling F1 site's driver page — a portrait
+ *  and a name, a row of totals, a life on one side and the season on the
+ *  other, then the game-by-game table. What differs is that a driver's page is
+ *  a career and this is a season: there is one season of data, so a career
+ *  record would be a table with one row in it.
+ *
+ *  Four hundred of these belong to players who have not taken a snap. That is
+ *  not a broken page — it is a squad, and most of a squad does not play on any
+ *  given Sunday. The page says so rather than showing empty tables.
+ */
+import Base from '@layouts/Base.astro';
+import Stat from '@components/Stat.astro';
+import Face from '@components/people/Face.astro';
+import { getPlayer, getPlayerIndex, getTeams, getGames } from '@lib/data';
+import { FIELDS, GROUP_LABEL, groupsOf, headline, show } from '@lib/stats';
+import { longDate, shortDate } from '@lib/format';
+import { gameUrl, u } from '@lib/url';
+
+export async function getStaticPaths() {
+  const { getPlayerIndex } = await import('@lib/data');
+  return Object.keys(getPlayerIndex().players).map((id) => ({ params: { id }, props: { id } }));
+}
+
+const { id } = Astro.props as { id: string };
+const p = getPlayer(id);
+const entry = getPlayerIndex().players[id]!;
+const teams = getTeams();
+const team = teams[p.team]!;
+const games = new Map(getGames().map((g) => [g.id, g]));
+
+/** Whole years to today. A birthday is a date, not a duration. */
+const ageOf = (iso: string): number => {
+  const a = new Date(iso), b = new Date();
+  let n = b.getFullYear() - a.getFullYear();
+  const m = b.getMonth() - a.getMonth();
+  if (m < 0 || (m === 0 && b.getDate() < a.getDate())) n -= 1;
+  return n;
+};
+const age = p.bio.born ? ageOf(p.bio.born) : null;
+const feet = p.bio.height_in ? `${Math.floor(p.bio.height_in / 12)}ft ${p.bio.height_in % 12}in` : null;
+
+const lead = headline(p.stats);
+const groups = groupsOf(p.stats);
+const played = p.log.length;
+
+/** The game log's columns follow whatever he mostly does, so a linebacker's
+ *  table is tackles and a receiver's is catches. Everything else he did is in
+ *  the season blocks below; repeating all of it per game would be forty
+ *  columns wide and unreadable. */
+const logGroup = lead?.group ?? null;
+const logFields = logGroup
+  ? FIELDS[logGroup].filter((f) => p.log.some((r) => (r.stats[logGroup]?.[f.key] ?? 0) !== 0)).slice(0, 6)
+  : [];
+
+const snapKey = logGroup === 'defence' ? 'def_pct' : 'off_pct';
+const anySnaps = p.log.some((r) => r.snaps?.[snapKey] !== undefined);
+
+const STATUS: Record<string, string> = {
+  ACT: 'Active', RES: 'Injured reserve', DEV: 'Practice squad',
+  CUT: 'Released', RET: 'Retired', EXE: 'Exempt list',
+};
+const title = p.name;
+---
+<Base title={title} description={`${p.name} — ${p.depth_pos ?? p.pos ?? 'player'} for the ${team.name}, ${p.season}.`}>
+  <header class="wrap section head" data-pagefind-body>
+    <p class="eyebrow">
+      <a class="plain" href={u('/players/')}>Players</a>
+      {(p.depth_pos ?? p.pos) && <> · {p.depth_pos ?? p.pos}</>}
+      {p.status !== 'ACT' && <> · {STATUS[p.status] ?? p.status}</>}
+    </p>
+
+    <div class="titling">
+      <Face id={p.id} name={p.name} face={entry.face} size={92} class="portrait" />
+      <div class="who">
+        <h1 class="display">{p.name}</h1>
+        <p class="club">
+          <a class="plain team" href={u(`/teams/${p.team}/`)}>
+            <img src={u(`/logos/sm/${p.team}.webp`)} alt="" width="26" height="26" />
+            <span>{team.name}</span>
+          </a>
+        </p>
+      </div>
+      {p.no != null && <span class="jersey num" aria-label={`Number ${p.no}`}>{p.no}</span>}
+    </div>
+
+    {lead ? (
+      <div class="stats">
+        <Stat label="Games" value={played} />
+        {lead.fields.map((f) => (
+          <Stat label={f.label} value={show(p.stats[lead.group]?.[f.key], f.fmt)} />
+        ))}
+      </div>
+    ) : (
+      <p class="lead measure noplay">
+        {played === 0
+          ? <>No statistics this season. {p.status === 'ACT'
+              ? <>He is on the active roster and has not yet recorded one.</>
+              : <>He is {(STATUS[p.status] ?? p.status).toLowerCase()}.</>}</>
+          : <>Has appeared in {played} game{played === 1 ? '' : 's'} without recording a statistic — which, for a lineman, is a normal season.</>}
+      </p>
+    )}
+  </header>
+
+  <hr class="rule" />
+
+  <div class="wrap section two-up">
+    <section>
+      <h2 class="title-lg">Life</h2>
+      <dl class="facts">
+        {p.bio.born && (
+          <><dt>Born</dt><dd><span class="num">{longDate(p.bio.born)}</span>
+            {age != null && <span class="muted"> · {age}</span>}</dd></>
+        )}
+        {p.bio.college && (<><dt>College</dt><dd>{p.bio.college}</dd></>)}
+        {feet && (
+          <><dt>Height</dt><dd class="num">{feet}</dd></>
+        )}
+        {p.bio.weight_lb != null && (<><dt>Weight</dt><dd class="num">{p.bio.weight_lb} lb</dd></>)}
+        <dt>Drafted</dt>
+        <dd>
+          {p.bio.draft
+            ? <>
+                <span class="num">Pick {p.bio.draft.pick}</span>
+                {p.bio.draft.club && teams[p.bio.draft.club] && (
+                  <> by the <a href={u(`/teams/${p.bio.draft.club}/`)}>{teams[p.bio.draft.club]!.nick}</a></>
+                )}
+              </>
+            /* Not a gap in the data. 1,230 of these players were never
+               drafted, and for a good many of them it is the point. */
+            : <span class="muted">Undrafted</span>}
+        </dd>
+        {p.bio.rookie != null && (<><dt>Rookie year</dt><dd class="num">{p.bio.rookie}</dd></>)}
+        {p.bio.exp != null && (
+          <><dt>Experience</dt>
+            <dd class="num">{p.bio.exp === 0 ? 'Rookie' : `${p.bio.exp} season${p.bio.exp === 1 ? '' : 's'}`}</dd></>
+        )}
+      </dl>
+    </section>
+
+    {groups.length > 0 && (
+      <section>
+        <h2 class="title-lg">The season</h2>
+        {groups.map(([name, g]) => (
+          <div class="block">
+            <h3 class="gname">{GROUP_LABEL[name]}</h3>
+            <dl class="facts tight">
+              {FIELDS[name].filter((f) => g[f.key] !== undefined).map((f) => (
+                <><dt>{f.label}</dt><dd class="num">{show(g[f.key], f.fmt)}</dd></>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </section>
+    )}
+  </div>
+
+  {played > 0 && (
+    <section class="wrap section">
+      <h2 class="headline">Game by game</h2>
+      <div class="table-scroll">
+        <table class="log">
+          <thead>
+            <tr>
+              <th class="n">Wk</th><th>Opponent</th><th class="n">Result</th>
+              {anySnaps && <th class="n" title="Share of his unit's snaps">Snaps</th>}
+              {logFields.map((f) => <th class="n">{f.short}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {p.log.map((r) => {
+              const g = games.get(r.game);
+              const grp = logGroup ? r.stats[logGroup] : undefined;
+              return (
+                <tr>
+                  <td class="n muted">{r.week}</td>
+                  <td>
+                    <a class="opp" href={gameUrl(r.game)}>
+                      <span class="at">{r.home ? 'vs' : 'at'}</span>
+                      <img src={u(`/logos/sm/${r.opp}.webp`)} alt="" width="20" height="20" />
+                      <span>{teams[r.opp]?.nick ?? r.opp}</span>
+                    </a>
+                  </td>
+                  <td class="n">
+                    {r.result
+                      ? <><span class:list={['res', r.result]}>{r.result}</span>
+                          <span class="score num"> {r.pf}–{r.pa}</span></>
+                      : <span class="muted">{g ? shortDate(g.date) : '—'}</span>}
+                  </td>
+                  {anySnaps && (
+                    <td class="n muted">
+                      {r.snaps?.[snapKey] !== undefined ? `${Math.round(r.snaps[snapKey]! * 100)}%` : '—'}
+                    </td>
+                  )}
+                  {logFields.map((f) => (
+                    <td class="n">{show(grp?.[f.key], f.fmt, grp !== undefined)}</td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</Base>
+
+<style>
+  .head { padding-bottom: clamp(20px, 2.6vw, 32px); }
+  .titling {
+    display: flex; align-items: center; gap: clamp(14px, 2vw, 24px);
+    margin-top: clamp(8px, 1vw, 14px);
+  }
+  .who { min-width: 0; }
+  .display { margin: 0; font-size: clamp(1.9rem, 4.6vw, var(--ks-type-display-size)); }
+  .club { margin: 6px 0 0; }
+  .team { display: inline-flex; align-items: center; gap: 8px; font-size: var(--ks-type-ui-size); color: var(--ks-text-muted); }
+  .team img { flex: none; }
+  .team:hover span { color: var(--ks-ink); }
+
+  /* The number is the player's own mark, so it sits at the far edge rather
+     than beside the name, as the racing number does on the sibling site. */
+  .jersey {
+    margin-left: auto; flex: none;
+    font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 200;
+    color: var(--ks-gray-2); line-height: 1;
+  }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: clamp(14px, 2.4vw, 32px);
+    margin-top: clamp(24px, 3.4vw, 40px);
+    padding-top: 20px; border-top: 1px solid var(--ks-edge);
+    max-width: 820px;
+  }
+  .noplay { margin-top: clamp(20px, 3vw, 32px); }
+
+  .two-up {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: clamp(26px, 4vw, 60px);
+  }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 0.5em 1.4em; margin: 1rem 0 0; }
+  .facts dt { color: var(--ks-text-mute-deep); font-size: var(--ks-type-ui-size); }
+  .facts dd { margin: 0; font-size: var(--ks-type-ui-size); color: var(--ks-ink); }
+  .facts.tight { gap: 0.34em 1.2em; margin-top: 0.7rem; }
+  .block + .block { margin-top: 1.6rem; }
+  .gname {
+    margin: 0; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-text-muted);
+  }
+
+  .log { width: 100%; }
+  .opp { display: inline-flex; align-items: center; gap: 8px; }
+  .opp img { flex: none; }
+  .at { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); text-transform: uppercase; letter-spacing: 0.08em; }
+  .res { font-weight: 600; color: var(--ks-text-muted); }
+  .res.W { color: var(--ks-ink); }
+  .score { color: var(--ks-text-mute-deep); }
+</style>

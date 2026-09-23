@@ -1,0 +1,53 @@
+---
+/** A player's portrait.
+ *
+ *  One size exists — 96px square, face-cropped by the league's own CDN before
+ *  it was ever downloaded. See fetch.py. That size is the whole image budget:
+ *  a club's squad page draws about fifty of them, which is roughly 90 KB, and
+ *  a page that drew all 1,734 would be 3 MB. Nothing draws all of them.
+ *
+ *  Nine players have no portrait published. They get their initials instead
+ *  rather than a silhouette, because a silhouette says "person unknown" when
+ *  what is true is "photograph not published", and the initials at least
+ *  identify who is missing.
+ */
+import { u } from '@lib/url';
+
+interface Props {
+  id: string; name: string; face?: boolean; size?: number; class?: string;
+}
+const { id, name, face = true, size = 40, class: cls = '' } = Astro.props;
+const initials = name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('');
+---
+{face ? (
+  <img
+    class:list={['face', cls]}
+    src={u(`/faces/${id}.webp`)}
+    alt=""
+    width={size}
+    height={size}
+    style={`--size:${size}px`}
+    loading="lazy"
+    decoding="async"
+  />
+) : (
+  <span class:list={['face none', cls]} style={`--size:${size}px`} aria-hidden="true">{initials}</span>
+)}
+
+<style>
+  .face {
+    display: block; flex: none;
+    width: var(--size); height: var(--size);
+    border-radius: 50%;
+    object-fit: cover; object-position: center top;
+    background: var(--ks-paper-deep);
+    box-shadow: inset 0 0 0 1px var(--ks-rule);
+  }
+  .none {
+    display: grid; place-items: center;
+    font-size: calc(var(--size) * 0.36);
+    letter-spacing: 0.04em;
+    color: var(--ks-text-mute-deep);
+    font-family: var(--ks-font), sans-serif;
+  }
+</style>

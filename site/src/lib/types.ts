@@ -228,3 +228,108 @@ export interface Game {
    *  that nothing is missing, and the page prints whatever is here. */
   notes: string[];
 }
+
+// ── People ───────────────────────────────────────────────────────────────────
+
+/** One group of statistics. Every field is optional because emit.py writes a
+ *  group only when the player did that thing at all, and writes a key within it
+ *  only when nflverse published one — a missing key inside a group that exists
+ *  means zero, not unknown. */
+export interface StatGroup { [key: string]: number | undefined; }
+
+export interface Stats {
+  passing?: StatGroup;
+  rushing?: StatGroup;
+  receiving?: StatGroup;
+  defence?: StatGroup;
+  kicking?: StatGroup;
+  punting?: StatGroup;
+  returns?: StatGroup;
+  penalty?: StatGroup;
+}
+
+export type StatName = keyof Stats;
+
+/** A player as the index knows him: enough to list, sort and link. */
+export interface PlayerEntry {
+  id: string;
+  name: string;
+  first: string | null;
+  last: string | null;
+  team: string;
+  /** The roster's coarse position: one of eleven — QB RB WR TE OL DL LB DB K P LS.
+   *  What a squad is grouped by. */
+  pos: string | null;
+  /** The club's depth-chart designation — CB rather than DB. What is shown. */
+  depth_pos: string | null;
+  /** nflverse's grouping, from the stats rather than the roster, so it is null
+   *  for anyone who has not played. */
+  group: string | null;
+  no: number | null;
+  /** ACT on a 53-man roster; RES injured; DEV practice squad; CUT released. */
+  status: string;
+  exp: number | null;
+  games: number;
+  face: boolean;
+  stats: Stats;
+}
+
+export interface PlayerIndex {
+  season: number;
+  players: Record<string, PlayerEntry>;
+  counts: { all: number; active: number; played: number; faces: number };
+}
+
+/** One game in a player's season. */
+export interface PlayerGame {
+  week: number;
+  game: string;
+  team: string;
+  opp: string;
+  home?: boolean;
+  pf?: number;
+  pa?: number;
+  result?: 'W' | 'L' | 'T';
+  stats: Stats;
+  /** Snaps taken and the share of his unit's. Absent for the ~1% of snap-count
+   *  rows that resolve to no player, and for weeks nobody charted. */
+  snaps?: { off?: number; def?: number; st?: number; off_pct?: number; def_pct?: number; st_pct?: number };
+}
+
+export interface Player {
+  id: string;
+  season: number;
+  name: string;
+  team: string;
+  pos: string | null;
+  depth_pos: string | null;
+  no: number | null;
+  status: string;
+  bio: {
+    born: string | null;
+    /** Inches and pounds, as published. */
+    height_in: number | null;
+    weight_lb: number | null;
+    college: string | null;
+    exp: number | null;
+    rookie: number | null;
+    /** Null means undrafted, which is a fact about a player and not a gap. */
+    draft: { club: string | null; pick: number | null } | null;
+  };
+  stats: Stats;
+  log: PlayerGame[];
+}
+
+export interface TeamWeek { week: number; game: string; opp: string; stats: Stats; }
+
+export interface TeamStat {
+  team: string;
+  /** What this club's offence did. */
+  for: Stats;
+  /** What was done to it — read off its opponents' rows, since nflverse
+   *  publishes a club's own offence and not what it conceded. */
+  against: Stats;
+  weeks: TeamWeek[];
+}
+
+export interface TeamStats { season: number; teams: Record<string, TeamStat>; }

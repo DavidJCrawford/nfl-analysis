@@ -3,9 +3,14 @@
  *  it is. Most of the page is fixture, as it is everywhere else on this site. */
 import Base from '@layouts/Base.astro';
 import Stat from '@components/Stat.astro';
-import { getRecords, getTeams, getTeamSeason, getWeeks, getGames } from '@lib/data';
+import Face from '@components/people/Face.astro';
+import {
+  getRecords, getTeams, getTeamSeason, getWeeks, getGames, getTeamStats, getSquad, tackles,
+} from '@lib/data';
 import { record, shortDate, signed, longDate } from '@lib/format';
+import { show } from '@lib/stats';
 import { gameUrl, u } from '@lib/url';
+import type { PlayerEntry } from '@lib/types';
 
 export async function getStaticPaths() {
   const { getTeams } = await import('@lib/data');
@@ -42,6 +47,70 @@ const next = rows.find((r) => !r.bye && r.result === null) as
 
 const allGames = getGames();
 const homeGames = allGames.filter((g) => g.home === abbr).length;
+
+/** What the club did, and what was done to it.
+ *
+ *  `for` is its own offence. `against` is its opponents' — nflverse publishes
+ *  a club's own numbers and not what it conceded, so the defensive half is
+ *  read off the other side's rows. See emit.py.
+ *
+ *  Sack yardage is published negative, so net yards add it rather than
+ *  subtract it. Checked against this pipeline's own box scores: the two agree
+ *  for all thirty-two clubs. */
+const ts = getTeamStats().teams[abbr];
+const net = (side: 'for' | 'against'): number | null => {
+  const g = ts?.[side];
+  if (!g?.passing && !g?.rushing) return null;
+  return (g.passing?.yards ?? 0) + (g.rushing?.yards ?? 0) + (g.passing?.sack_yards ?? 0);
+};
+const gained = net('for');
+const allowed = net('against');
+// Passing and receiving touchdowns are the same touchdowns counted twice, so
+// only one of them goes into the total.
+const tds = (side: 'for' | 'against') =>
+  (ts?.[side].passing?.td ?? 0) + (ts?.[side].rushing?.td ?? 0);
+const giveaways = (side: 'for' | 'against') =>
+  (ts?.[side].passing?.int ?? 0) + (ts?.[side].rushing?.lost ?? 0);
+
+const squad = getSquad(abbr);
+/** The roster files its players under eleven positions and no others, so
+ *  these three lists between them hold everybody. The finer designation — a
+ *  cornerback rather than a defensive back — is on the card, from the club's
+ *  own depth chart. An "Elsewhere" group is kept below all the same: eleven is
+ *  what the data says today, not a promise about next season. */
+const UNITS: { title: string; note: string; has: string[] }[] = [
+  { title: 'Offence', note: 'With the ball', has: ['QB', 'RB', 'WR', 'TE', 'OL'] },
+  { title: 'Defence', note: 'Against it', has: ['DL', 'LB', 'DB'] },
+  { title: 'Specialists', note: 'Kicking and snapping', has: ['K', 'P', 'LS'] },
+];
+const units = UNITS
+  .map((un) => ({ ...un, men: squad.filter((p) => un.has.includes(p.pos ?? '')) }))
+  .filter((un) => un.men.length);
+// Anyone whose position is not in any of the three lists, so nobody is lost
+// off the page because of an abbreviation nobody anticipated.
+const placed = new Set(units.flatMap((un) => un.men.map((m) => m.id)));
+const others = squad.filter((p) => !placed.has(p.id));
+
+/** The one line a squad card shows, chosen by what the player mostly does. */
+const line = (p: PlayerEntry): string | null => {
+  const st = p.stats;
+  if (st.passing?.att) return `${st.passing.yards ?? 0} yds · ${st.passing.td ?? 0} TD`;
+  if (st.rushing?.att && (st.rushing.att >= (st.receiving?.rec ?? 0)))
+    return `${st.rushing.yards ?? 0} yds · ${st.rushing.td ?? 0} TD`;
+  if (st.receiving?.rec) return `${st.receiving.rec} rec · ${st.receiving.yards ?? 0} yds`;
+  // Before tackles, not after: a kicker who made one assisted tackle on a
+  // return is a kicker, and reading "1 tkl" against his name instead of his
+  // field goals describes the least of what he did all season.
+  if (st.kicking?.fga) return `${st.kicking.fgm ?? 0}/${st.kicking.fga} FG`;
+  if (st.punting?.att) return `${st.punting.att} punts`;
+  if (tackles(st)) return `${tackles(st)} tkl${st.defence?.sacks ? ` · ${show(st.defence.sacks, 'dec')} sk` : ''}`;
+  return null;
+};
+
+const STATUS: Record<string, string> = {
+  RES: 'Injured reserve', DEV: 'Practice squad', CUT: 'Released',
+  RET: 'Retired', EXE: 'Exempt',
+};
 ---
 
 <Base title={team.name} description={`${team.name} — the 2026 season, week by week.`}>
@@ -73,6 +142,39 @@ const homeGames = allGames.filter((g) => g.home === abbr).length;
       {next && <> Next: {next.home ? '' : 'away to '}{teams[next.opp]!.nick} on {longDate(next.g.date)}.</>}
     </p>
   </header>
+
+  {ts && gained !== null && (
+    <>
+      <hr class="rule" />
+      <section class="wrap section" aria-labelledby="doing">
+        <h2 id="doing" class="headline">What they have done</h2>
+        <div class="sides">
+          <div class="side">
+            <h3 class="sname">Offence</h3>
+            <div class="stats compact">
+              <Stat label="Net yards" value={gained.toLocaleString('en-GB')} />
+              <Stat label="Passing" value={(ts.for.passing?.yards ?? 0).toLocaleString('en-GB')} />
+              <Stat label="Rushing" value={(ts.for.rushing?.yards ?? 0).toLocaleString('en-GB')} />
+              <Stat label="Touchdowns" value={tds('for')} />
+              <Stat label="Giveaways" value={giveaways('for')} />
+              <Stat label="Sacked" value={ts.for.passing?.sacked ?? 0} />
+            </div>
+          </div>
+          <div class="side">
+            <h3 class="sname">Defence</h3>
+            <div class="stats compact">
+              <Stat label="Yards allowed" value={(allowed ?? 0).toLocaleString('en-GB')} />
+              <Stat label="Passing" value={(ts.against.passing?.yards ?? 0).toLocaleString('en-GB')} />
+              <Stat label="Rushing" value={(ts.against.rushing?.yards ?? 0).toLocaleString('en-GB')} />
+              <Stat label="Touchdowns" value={tds('against')} />
+              <Stat label="Takeaways" value={giveaways('against')} />
+              <Stat label="Sacks" value={show(ts.for.defence?.sacks, 'dec')} />
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  )}
 
   <hr class="rule" />
 
@@ -108,6 +210,47 @@ const homeGames = allGames.filter((g) => g.home === abbr).length;
       ))}
     </ol>
   </section>
+
+  {squad.length > 0 && (
+    <>
+      <hr class="rule" />
+      <section class="wrap section" aria-labelledby="squad">
+        <h2 id="squad" class="headline">Squad</h2>
+        <p class="ui muted" style="margin-top:.6em">
+          {squad.length} players. Anyone who has left — injured reserve, the practice
+          squad — stays on the list, because he is in this club's season and in the
+          pages already written about it.
+        </p>
+
+        {[...units, ...(others.length ? [{ title: 'Elsewhere', note: 'Other positions', men: others }] : [])].map((un) => (
+          <section class="unit">
+            <header class="uhead">
+              <h3 class="utitle">{un.title}</h3>
+              <p class="unote">{un.note} · {un.men.length}</p>
+            </header>
+            <ul class="men">
+              {un.men.map((p) => (
+                <li>
+                  <a class:list={['plain man', { gone: p.status !== 'ACT' }]} href={u(`/players/${p.id}/`)}>
+                    <Face id={p.id} name={p.name} face={p.face} size={38} />
+                    <span class="no num">{p.no ?? '—'}</span>
+                    <span class="who">
+                      <span class="nm">{p.name}</span>
+                      <span class="sub">
+                        {p.depth_pos ?? p.pos}
+                        {p.status !== 'ACT' && <> · {STATUS[p.status] ?? p.status}</>}
+                      </span>
+                    </span>
+                    <span class="tally num">{line(p) ?? <span class="muted">—</span>}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </section>
+    </>
+  )}
 </Base>
 
 <style>
@@ -157,6 +300,32 @@ const homeGames = allGames.filter((g) => g.home === abbr).length;
   .res.W { color: var(--ks-ink); }
   .sep { padding-inline: 1px; color: var(--ks-text-mute-deep); }
   .tbd { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); }
+
+  .sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(24px, 3.4vw, 52px); margin-top: 26px; }
+  .sname { margin: 0 0 14px; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+           text-transform: uppercase; color: var(--ks-text-muted);
+           padding-bottom: 8px; border-bottom: 1px solid var(--ks-rule); }
+  .stats.compact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+                   gap: clamp(12px, 2vw, 24px); margin: 0; padding: 0; border: 0; max-width: none; }
+
+  .unit { margin-top: clamp(26px, 3.4vw, 40px); }
+  .uhead { display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--ks-rule); }
+  .utitle { margin: 0; font-size: var(--ks-type-title-size); font-weight: 600; color: var(--ks-ink); }
+  .unote { margin: 0 0 0 auto; font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep);
+           text-transform: uppercase; letter-spacing: 0.08em; }
+  .men { list-style: none; margin: 14px 0 0; padding: 0;
+         display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 6px clamp(14px, 2vw, 28px); }
+  .man { display: grid; grid-template-columns: auto 2em 1fr auto; align-items: center; gap: 11px; padding: 6px 0; }
+  .man:hover .nm { color: var(--ks-kinpaku); }
+  .man .no { font-size: var(--ks-type-ui-size); color: var(--ks-text-mute-deep); text-align: right; }
+  .man .who { display: flex; flex-direction: column; min-width: 0; }
+  .man .nm { font-size: var(--ks-type-ui-size); color: var(--ks-ink);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .man .sub { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); margin-top: 1px; }
+  .man .tally { font-size: var(--ks-type-eyebrow-size); color: var(--ks-text-mute-deep); white-space: nowrap; }
+  /* Still on the page, visibly not in the team. */
+  .man.gone .nm, .man.gone .no { color: var(--ks-text-faint); }
+  .man.gone :global(.face) { opacity: 0.55; }
 
   /* A bye is a week with no game in it, and looks like one. */
   .week.bye { min-height: 40px; }

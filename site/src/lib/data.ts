@@ -14,7 +14,10 @@
  *  which cost half an hour of chasing a bug that had already been fixed. */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Game, Schedule, ScheduleGame, Teams } from './types';
+import type {
+  Game, Player, PlayerEntry, PlayerIndex, Schedule, ScheduleGame,
+  StatName, Stats, Teams, TeamStats,
+} from './types';
 
 declare const __DATA_DIR__: string;
 
@@ -119,3 +122,54 @@ export const getWeeks = (): Week[] => {
     };
   });
 };
+
+// ── People ───────────────────────────────────────────────────────────────────
+
+export const getPlayerIndex = (): PlayerIndex => read<PlayerIndex>('players.json');
+export const getPlayers = (): PlayerEntry[] => Object.values(getPlayerIndex().players);
+export const getPlayer = (id: string): Player => read<Player>(join('players', `${id}.json`));
+export const getTeamStats = (): TeamStats => read<TeamStats>('team-stats.json');
+
+/** The order a squad list is read in: the ball first, then the people who
+ *  stop it, then the specialists. Within a group, by jersey number, which is
+ *  itself roughly positional and is the number on the page. */
+const UNIT_ORDER = ['QB', 'RB', 'FB', 'WR', 'TE', 'OT', 'G', 'C',
+                    'DE', 'DT', 'LB', 'CB', 'SAF', 'DB', 'K', 'P', 'LS'];
+
+export const byUnit = (a: PlayerEntry, b: PlayerEntry): number => {
+  const ra = UNIT_ORDER.indexOf(a.pos ?? ''), rb = UNIT_ORDER.indexOf(b.pos ?? '');
+  if (ra !== rb) return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb);
+  return (a.no ?? 999) - (b.no ?? 999);
+};
+
+/** One club's squad, in reading order.
+ *
+ *  Includes players who have left — a man on injured reserve is still part of
+ *  this club's season and is in its published game pages — but puts them last,
+ *  since a squad list is first of all a list of who is available. */
+export const getSquad = (abbr: string): PlayerEntry[] =>
+  getPlayers()
+    .filter((p) => p.team === abbr)
+    .sort((a, b) => {
+      const aa = a.status === 'ACT', ba = b.status === 'ACT';
+      if (aa !== ba) return aa ? -1 : 1;
+      return byUnit(a, b);
+    });
+
+/** Sum a stat across a player's season, for sorting a leaderboard. */
+export const stat = (p: PlayerEntry, group: StatName, key: string): number =>
+  (p.stats[group]?.[key] ?? 0);
+
+/** The top few at one thing, with everyone who has not done it at all left
+ *  out — a leaderboard of zeroes is not a leaderboard. */
+export const leaders = (
+  group: StatName, key: string, n = 5, from: PlayerEntry[] = getPlayers(),
+): PlayerEntry[] =>
+  from.filter((p) => stat(p, group, key) > 0)
+      .sort((a, b) => stat(b, group, key) - stat(a, group, key) || a.name.localeCompare(b.name))
+      .slice(0, n);
+
+/** Tackles as they are counted on a scoreboard: solo plus assists. nflverse
+ *  publishes them apart, and no defensive page anywhere shows only one half. */
+export const tackles = (s: Stats | undefined): number =>
+  (s?.defence?.solo ?? 0) + (s?.defence?.assist ?? 0);
