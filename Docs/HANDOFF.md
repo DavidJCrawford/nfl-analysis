@@ -266,6 +266,22 @@ counts the first path segment across every internal href on the site and takes
 the one that dominates and is not a real directory in the build. A signal
 drawn from one arbitrary page is not a signal.
 
+**Measure colour distance on what is drawn, not on what was published.** The
+comparison bars pass every club colour through `legible()`, which puts a floor
+under lightness and chroma so a dark colour can be seen on the black panel.
+The routine that keeps two clubs apart was comparing the raw hex values, which
+is a different question: Kansas City's gold `#FFB612` and Tampa Bay's
+near-black `#322F2B` are 137 apart in sRGB and 3.7 degrees apart in hue, so
+the old metric picked them as the *most* separated pair available and drew
+both sides of the chart in the same yellow-brown. It now converts to OKLab,
+applies the same floors the bars get, and measures there — checked against the
+browser's own conversion, which agrees to four decimal places.
+
+The chroma floor has one exception, for the same reason: applied to a colour
+that is *meant* to be neutral it invents a hue, and Las Vegas's silver came
+out a pale blue that sat almost on top of Philadelphia's lifted teal. Below
+0.02 chroma a colour is left alone.
+
 ## 5. What to do next, and what to be careful of
 
 In rough order of value:

@@ -29,16 +29,14 @@ const order = getTeamOrder();
       </header>
 
       <div class="board" data-compare>
+        {/* One control. The club on the left is the one whose page this was
+            opened from, and it stays put — swapping two things that are
+            already both on screen rearranges the picture without changing what
+            it says, and being able to change the left-hand one means the
+            reader can navigate away from their own subject by accident. */}
         <form class="picker" data-picker>
           <label class="pick">
-            <span class="plabel">First club</span>
-            <select name="a" data-a>
-              {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
-            </select>
-          </label>
-          <button class="swap" type="button" data-swap aria-label="Swap the two clubs">⇄</button>
-          <label class="pick">
-            <span class="plabel">Second club</span>
+            <span class="plabel">Compare with</span>
             <select name="b" data-b>
               {order.map((abbr) => <option value={abbr}>{teams[abbr]!.name}</option>)}
             </select>
@@ -70,7 +68,6 @@ const order = getTeamOrder();
 
   const board = document.querySelector<HTMLElement>('[data-compare]')!;
   const form = board.querySelector<HTMLFormElement>('[data-picker]')!;
-  const selA = board.querySelector<HTMLSelectElement>('[data-a]')!;
   const selB = board.querySelector<HTMLSelectElement>('[data-b]')!;
   const head = board.querySelector<HTMLElement>('[data-head]')!;
   const rows = board.querySelector<HTMLElement>('[data-rows]')!;
@@ -139,7 +136,13 @@ const order = getTeamOrder();
       return;
     }
     state.hidden = true;
-    selA.value = ka; selB.value = kb;
+    // The left-hand club is not on offer as the right-hand one.
+    for (const o of selB.options) {
+      const same = o.value === ka;
+      o.hidden = same;
+      o.disabled = same;
+    }
+    selB.value = kb;
     // Two of the league's navy blues would otherwise draw both sides of every
     // row in the same colour.
     const [ca, cb] = pickColours(a.color, a.color2, b.color, b.color2);
@@ -160,10 +163,10 @@ const order = getTeamOrder();
     paint(a, b);
   }
 
-  form.addEventListener('submit', (e) => { e.preventDefault(); go(selA.value, selB.value); });
-  board.querySelector('[data-swap]')!.addEventListener('click', () => {
-    const a = selA.value, b = selB.value;
-    if (fromUrl()) go(b, a); else { selA.value = b; selB.value = a; }
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pair = fromUrl();
+    if (pair) go(pair[0], selB.value);
   });
   addEventListener('popstate', () => { const p = fromUrl(); if (p) paint(p[0], p[1]); });
 
@@ -176,11 +179,14 @@ const order = getTeamOrder();
       return;
     }
     const pair = fromUrl();
-    if (pair) go(pair[0], pair[1], false);
-    else {
-      selA.value = 'KC'; selB.value = 'PHI';
-      state.textContent = 'Pick two clubs.';
-    }
+    if (pair) { go(pair[0], pair[1], false); return; }
+    // Reached without a pair — which only happens by typing the address, since
+    // every link into this screen names both clubs. There is no left-hand club
+    // to compare against, so the screen says so rather than inventing one.
+    form.hidden = true;
+    state.innerHTML =
+      `Open this from a club's own page to compare it with another — ` +
+      `<a href="${u('/teams/')}">the clubs are here</a>.`;
   })();
 </script>
 

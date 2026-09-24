@@ -32,19 +32,11 @@ const palette = Object.fromEntries(
       </header>
 
       <div class="board" data-compare data-palette={JSON.stringify(palette)}>
+        {/* One control. The player on the left is the one whose page this was
+            opened from, and he stays put. */}
         <form class="picker" data-picker>
           <div class="pick">
-            <span class="plabel" id="lab-a">First player</span>
-            <div class="combo">
-              <input data-a role="combobox" aria-autocomplete="list" aria-expanded="false"
-                     aria-controls="sug-a" aria-labelledby="lab-a"
-                     autocomplete="off" placeholder="Start typing a name" />
-              <ul class="sug" id="sug-a" role="listbox" aria-label="Players" hidden></ul>
-            </div>
-          </div>
-          <button class="swap" type="button" data-swap aria-label="Swap the two players">⇄</button>
-          <div class="pick">
-            <span class="plabel" id="lab-b">Second player</span>
+            <span class="plabel" id="lab-b">Compare with</span>
             <div class="combo">
               <input data-b role="combobox" aria-autocomplete="list" aria-expanded="false"
                      aria-controls="sug-b" aria-labelledby="lab-b"
@@ -102,10 +94,15 @@ const palette = Object.fromEntries(
      <datalist> this replaced is an ordinary text box until you type — next to
      the clubs page's real dropdowns it read as a field that had failed. This
      opens on focus, shows faces, and answers the arrow keys. */
-  function combobox(input: HTMLInputElement, list: HTMLUListElement, onPick: () => void) {
+  function combobox(input: HTMLInputElement, list: HTMLUListElement) {
     let hits: any[] = [];
     let at = -1;
     let chosen: string | null = null;
+    /** The man on the left: not on offer as the man on the right, and the
+     *  reason the untyped list opens on his position rather than on the
+     *  alphabet. */
+    let exclude: string | null = null;
+    let anchorPos: string | null = null;
 
     const shut = () => {
       list.hidden = true; at = -1;
@@ -139,11 +136,21 @@ const palette = Object.fromEntries(
     }
 
     function open(): void {
-      const q = input.value.trim().toLowerCase();
+      // A box holding the name of the player already chosen is not a search
+      // for him — it is a box waiting to be changed. Filtering on it left the
+      // list containing exactly one man: the one already selected.
+      const typed = input.value.trim();
+      const q = (chosen && typed === people[chosen]?.name) ? '' : typed.toLowerCase();
+      const pool = sorted.filter((p) => p.id !== exclude);
+      // Typed: search everybody. Untyped: his own position, busiest first —
+      // the comparison somebody actually opened this screen to make. Sorted
+      // by games alone, an untyped list opened on whoever came first in the
+      // alphabet among the several hundred men who have played twice.
+      const same = anchorPos ? pool.filter((p) => p.pos === anchorPos) : [];
       hits = (q
-        ? sorted.filter((p) => p.name.toLowerCase().includes(q)
+        ? pool.filter((p) => p.name.toLowerCase().includes(q)
             || p.team.toLowerCase() === q || (p.pos ?? '').toLowerCase() === q)
-        : sorted).slice(0, 40);
+        : (same.length ? same : pool)).slice(0, 40);
       if (!hits.length) {
         const li = document.createElement('li');
         li.className = 'snone'; li.textContent = 'Nobody by that name.';
@@ -167,10 +174,11 @@ const palette = Object.fromEntries(
       chosen = p.id;
       input.value = p.name;
       shut();
-      onPick();
     }
 
-    input.addEventListener('focus', open);
+    // Select what is there, so typing replaces the name rather than appending
+    // to it, and the list opens on everybody.
+    input.addEventListener('focus', () => { if (chosen) input.select(); open(); });
     input.addEventListener('input', () => { chosen = null; open(); });
     input.addEventListener('blur', () => setTimeout(shut, 120));
     input.addEventListener('keydown', (e) => {
@@ -199,11 +207,12 @@ const palette = Object.fromEntries(
         return exact.length === 1 ? exact[0].id : null;
       },
       set(p: any) { chosen = p.id; input.value = p.name; },
+      /** Fix the man being compared against. */
+      against(p: any) { exclude = p.id; anchorPos = p.pos ?? null; },
     };
   }
 
-  const boxA = combobox(board.querySelector('[data-a]')!, board.querySelector('#sug-a')!, () => {});
-  const boxB = combobox(board.querySelector('[data-b]')!, board.querySelector('#sug-b')!, () => {});
+  const boxB = combobox(board.querySelector('[data-b]')!, board.querySelector('#sug-b')!);
 
   function side(p: any, which: 'a' | 'b', colour: string): HTMLAnchorElement {
     const box = document.createElement('a');
@@ -255,7 +264,8 @@ const palette = Object.fromEntries(
       head.replaceChildren(); rows.replaceChildren();
       state.textContent = 'That is the same player twice. Pick another.'; state.hidden = false; return;
     }
-    boxA.set(a); boxB.set(b);
+    boxB.against(a);
+    boxB.set(b);
     const [ca, cb] = colours(a, b);
 
     const wrap = document.createElement('div');
@@ -300,15 +310,11 @@ const palette = Object.fromEntries(
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const a = boxA.id(), b = boxB.id();
-    if (!a || !b) {
-      state.textContent = 'Pick both names from the list.'; state.hidden = false; return;
-    }
-    go(a, b);
-  });
-  board.querySelector('[data-swap]')!.addEventListener('click', () => {
-    const a = boxA.id(), b = boxB.id();
-    if (a && b) go(b, a);
+    const pair = fromUrl();
+    const b = boxB.id();
+    if (!pair) return;
+    if (!b) { state.textContent = 'Pick a name from the list.'; state.hidden = false; return; }
+    go(pair[0], b);
   });
   addEventListener('popstate', () => { const p = fromUrl(); if (p) paint(p[0], p[1]); });
 
@@ -323,8 +329,15 @@ const palette = Object.fromEntries(
     // Busiest first, so an empty box opens on people somebody might want.
     sorted = Object.values(people).sort((x: any, y: any) => y.games - x.games || x.name.localeCompare(y.name));
     const pair = fromUrl();
-    if (pair) go(pair[0], pair[1], false);
-    else { state.textContent = 'Pick two players.'; state.hidden = false; }
+    if (pair) { go(pair[0], pair[1], false); return; }
+    // Reached without a pair — only by typing the address, since every link in
+    // names both men. There is no left-hand player, so the screen says so
+    // rather than choosing one.
+    form.hidden = true;
+    state.innerHTML =
+      `Open this from a player's own page to compare him with another — ` +
+      `<a href="${u('/players/')}">the players are here</a>.`;
+    state.hidden = false;
   })();
 </script>
 

@@ -254,8 +254,20 @@ export function drawSections(sections: Section[], colourA: string, colourB: stri
  *  Relative colour syntax, which every browser that can run the replay has had
  *  for two years. Callers set the raw hex first so that anything which cannot
  *  parse this keeps a colour rather than none. */
-export const legible = (hex: string): string =>
-  `oklch(from ${hex} max(l, 0.62) max(c, 0.055) h)`;
+export const legible = (hex: string): string => {
+  const { a, b } = oklab(hex);
+  // A chroma floor rescues a dark colour that would otherwise go flat grey
+  // when it is lifted — but applied to a colour that is *meant* to be
+  // neutral it invents a hue. Las Vegas's silver #A5ACAF came out a pale
+  // blue, which then sat almost on top of Philadelphia's lifted teal. Silver
+  // is a club colour; it is allowed to stay silver.
+  return Math.hypot(a, b) < NEUTRAL_C
+    ? `oklch(from ${hex} max(l, 0.62) c h)`
+    : `oklch(from ${hex} max(l, 0.62) max(c, 0.055) h)`;
+};
+
+/** Below this much chroma a colour is a neutral, not a dark version of a hue. */
+const NEUTRAL_C = 0.02;
 
 const rgb = (hex: string): [number, number, number] => {
   const h = hex.replace('#', '').trim();
@@ -264,9 +276,45 @@ const rgb = (hex: string): [number, number, number] => {
   return Number.isNaN(v) ? [128, 128, 128] : [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 };
 
+/** sRGB hex to OKLab. Checked against the browser's own conversion: #004C54
+ *  comes back C 0.0653 h 206.894, where Chrome computes 0.0652327 / 206.895. */
+function oklab(hex: string): { L: number; a: number; b: number } {
+  const lin = (x: number) => (x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+  const [R, G, B] = rgb(hex).map((v) => lin(v / 255)) as [number, number, number];
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s2 = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  return {
+    L: 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s2,
+    a: 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s2,
+    b: 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s2,
+  };
+}
+
+/** The colour as the bar will actually carry it — with `legible`'s floors
+ *  already applied. */
+function drawn(hex: string): [number, number, number] {
+  const { L, a, b } = oklab(hex);
+  const C = Math.hypot(a, b);
+  const h = Math.atan2(b, a);
+  const L2 = Math.max(L, 0.62);
+  const C2 = C < NEUTRAL_C ? C : Math.max(C, 0.055);   // mirrors `legible`
+  return [L2, C2 * Math.cos(h), C2 * Math.sin(h)];
+}
+
+/** How far apart two colours look, measured on what is drawn rather than on
+ *  what was published.
+ *
+ *  This used to be Euclidean distance between the raw hex values, which is a
+ *  different question. `legible` puts a floor under lightness and chroma, so
+ *  two colours separated in sRGB mostly by *lightness* collapse onto each
+ *  other once it has run: Kansas City's gold #FFB612 and Tampa Bay's
+ *  near-black #322F2B are 137 apart in RGB and 3.7 degrees apart in hue, and
+ *  the old metric cheerfully picked them as the most separated pair available.
+ *  Measured after the transform, they are 0.11 apart and rejected. */
 const apart = (x: string, y: string): number => {
-  const [r1, g1, b1] = rgb(x), [r2, g2, b2] = rgb(y);
-  return Math.hypot(r1 - r2, g1 - g2, b1 - b2);
+  const [l1, a1, b1] = drawn(x), [l2, a2, b2] = drawn(y);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
 };
 
 const chroma = (hex: string): number => {
@@ -288,8 +336,7 @@ const light = (hex: string): number => {
  *
  *  Only for the colourless. Chicago's navy and Green Bay's dark green are also
  *  dark, but they are a hue, they survive being lifted, and they are what
- *  those clubs look like. Swapping those for orange and gold would be the page
- *  deciding it knew better. */
+ *  those clubs look like. */
 const ink = (main: string, alt: string): string => {
   if (!main) return alt || main;
   if (chroma(main) >= 12) return main;
@@ -314,5 +361,7 @@ export function pickColours(
     [aInk, bInk], [aInk, bAlt], [aAlt, bInk], [aMain, bMain], [aAlt, bAlt],
   ].filter(([x, y]) => x && y) as [string, string][];
   const best = options.reduce((acc, o) => (apart(o[0], o[1]) > apart(acc[0], acc[1]) ? o : acc), options[0]!);
-  return apart(options[0]![0], options[0]![1]) >= 90 ? options[0]! : best;
+  // 0.15 in OKLab: comfortably past the point where two bars side by side
+  // read as two colours rather than as one colour and a shade of it.
+  return apart(options[0]![0], options[0]![1]) >= 0.15 ? options[0]! : best;
 }

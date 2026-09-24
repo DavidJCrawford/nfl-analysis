@@ -68,7 +68,7 @@
   padding-bottom: clamp(16px, 2vw, 24px);
   border-bottom: 1px solid var(--ks-instrument-rule);
 }
-.pick { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1 1 200px; }
+.pick { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 0 1 340px; }
 .plabel {
   font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
   text-transform: uppercase; color: var(--ks-instrument-muted);
@@ -79,16 +79,14 @@
   border: 1px solid var(--ks-instrument-rule); border-radius: 6px;
   padding: 0 10px; font: inherit; font-size: var(--ks-type-ui-size);
 }
-.swap, .go {
+.go {
   height: var(--ks-control-md); padding: 0 16px; flex: none;
-  border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-pill);
-  background: var(--ks-instrument-raised); color: var(--ks-instrument-text);
+  border: 1px solid transparent; border-radius: var(--ks-radius-pill);
+  background: var(--ks-kinpaku); color: oklch(18% 0 0);
   cursor: pointer; font-size: var(--ks-type-eyebrow-size);
   letter-spacing: 0.12em; text-transform: uppercase;
 }
-.swap { padding: 0 12px; letter-spacing: 0; font-size: 1rem; }
-.go { background: var(--ks-kinpaku); color: oklch(18% 0 0); border-color: transparent; }
-.swap:hover, .go:hover { filter: brightness(1.08); }
+.go:hover { filter: brightness(1.08); }
 .picker :focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 2px; }
 
 .state {
@@ -241,3 +239,6 @@
 }
 .sug .ssub { font-size: var(--ks-type-eyebrow-size); color: var(--ks-instrument-muted); white-space: nowrap; }
 .sug .snone { display: block; padding: 8px; color: var(--ks-instrument-muted); font-size: var(--ks-type-ui-size); }
+
+/* Hidden when the screen was reached without a pair to compare. */
+.picker[hidden] { display: none; }

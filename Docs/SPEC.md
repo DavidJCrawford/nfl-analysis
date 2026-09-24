@@ -158,6 +158,14 @@ plots quantities on axes with nothing to do with each other, closes the shape,
 and invites the reader to compare areas that mean nothing. Two bars from a
 common baseline is the one comparison the eye does accurately.
 
+One control, on the right. The subject on the left is whoever's page the
+screen was opened from and it stays put: swapping two things already both on
+screen rearranges the picture without changing what it says, and letting the
+left-hand one be changed lets a reader navigate away from their own subject by
+accident. The right-hand picker never offers the left-hand subject, and a
+player picker opens on men of the same position, because comparing a
+quarterback with a long snapper draws an empty chart.
+
 Only statistics both subjects have are drawn. A quarterback and a cornerback
 share none, and 412 passing yards against a blank is not a comparison; the page
 says so and names what each of them has instead.
