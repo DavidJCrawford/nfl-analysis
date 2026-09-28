@@ -90,9 +90,9 @@ const title = p.name;
 
     {lead ? (
       <div class="stats">
-        <Stat label="Games" value={played} />
+        <Stat spoil label="Games" value={played} />
         {lead.fields.map((f) => (
-          <Stat label={f.label} value={show(p.stats[lead.group]?.[f.key], f.fmt)} />
+          <Stat spoil label={f.label} value={show(p.stats[lead.group]?.[f.key], f.fmt)} />
         ))}
       </div>
     ) : (
@@ -145,8 +145,11 @@ const title = p.name;
     {groups.length > 0 && (
       <section>
         <h2 class="title-lg">The season</h2>
+        <p class="spoil-note" style="margin-top:1rem">
+          His season's numbers are hidden while spoilers are off.
+        </p>
         {groups.map(([name, g]) => (
-          <div class="block">
+          <div class="block spoil-block">
             <h3 class="gname">{GROUP_LABEL[name]}</h3>
             <dl class="facts tight">
               {FIELDS[name].filter((f) => g[f.key] !== undefined).map((f) => (
@@ -187,17 +190,17 @@ const title = p.name;
                   </td>
                   <td class="n">
                     {r.result
-                      ? <><span class:list={['res', r.result]}>{r.result}</span>
-                          <span class="score num"> {r.pf}–{r.pa}</span></>
+                      ? <span class="spoil wide"><span class:list={['res', r.result]}>{r.result}</span>
+                          <span class="score num"> {r.pf}–{r.pa}</span></span>
                       : <span class="muted">{g ? shortDate(g.date) : '—'}</span>}
                   </td>
                   {anySnaps && (
                     <td class="n muted">
-                      {r.snaps?.[snapKey] !== undefined ? `${Math.round(r.snaps[snapKey]! * 100)}%` : '—'}
+                      <span class="spoil">{r.snaps?.[snapKey] !== undefined ? `${Math.round(r.snaps[snapKey]! * 100)}%` : '—'}</span>
                     </td>
                   )}
                   {logFields.map((f) => (
-                    <td class="n">{show(grp?.[f.key], f.fmt, grp !== undefined)}</td>
+                    <td class="n"><span class="spoil" style="--spoil-w:2em">{show(grp?.[f.key], f.fmt, grp !== undefined)}</span></td>
                   ))}
                 </tr>
               );

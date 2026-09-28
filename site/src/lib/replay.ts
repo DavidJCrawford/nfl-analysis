@@ -1777,7 +1777,15 @@ export function mountReplay(): void {
         cx.arc(markX(k), rowOf(home > 0 ? data.away : data.home), r, 0, Math.PI * 2);
         cx.fill();
       }
-      if (k > 0 && f.q !== data.frames[k - 1]!.q) {
+      // Quarter lines are drawn ahead of the playhead, because every game has
+      // four quarters and knowing where they fall gives nothing away. The
+      // overtime line is not. It used to be drawn from kickoff like the rest,
+      // which put "OT" on the scrubber of a game still in its first quarter —
+      // telling a reader watching the replay precisely the thing the score
+      // rule above exists to keep from them: that it would be level after
+      // sixty minutes. It appears now when the replay gets there.
+      const reached = f.q <= 4 || k <= upTo;
+      if (k > 0 && f.q !== data.frames[k - 1]!.q && reached) {
         cx.strokeStyle = 'oklch(100% 0 0 / 0.3)';
         cx.lineWidth = 1;
         cx.beginPath();

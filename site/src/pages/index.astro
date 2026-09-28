@@ -83,7 +83,7 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
       {leaders.map((d) => (
         <div class="stand">
           <p class="dname">{d.div}</p>
-          <p class="crests">
+          <p class="crests spoil">
             {d.top.map((a) => (
               <a class="plain crest-link" href={u(`/teams/${a}/`)}>
                 <img src={u(`/logos/sm/${a}.webp`)} alt={teams[a]!.nick} width="48" height="48" />
@@ -91,9 +91,11 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
             ))}
           </p>
           <p class="drec num">
-            {record(d.rec)}
-            {/* Said plainly, because four crests at 0–1 is not a standing. */}
-            {d.level && <span class="level"> · all level</span>}
+            <span class="spoil">{record(d.rec)}</span>
+            {/* Said plainly, because four crests at 0–1 is not a standing.
+                Gone rather than covered when spoilers are off: a bar would
+                mark which divisions were level. */}
+            {d.level && <span class="level spoil-gone"> · all level</span>}
           </p>
         </div>
       ))}
@@ -115,12 +117,12 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
                 {/* Decorative: the club's name is the next thing along. */}
                 <img class="crest" src={u(`/logos/sm/${g.away}.webp`)} alt="" width="48" height="48" />
                 <span class:list={['club', { won: g.played && (g.margin ?? 0) < 0 }]}>{teams[g.away]!.nick}</span>
-                {g.played && <span class="pts num">{g.away_score}</span>}
+                {g.played && <span class="pts num spoil">{g.away_score}</span>}
               </span>
               <span class="side">
                 <img class="crest" src={u(`/logos/sm/${g.home}.webp`)} alt="" width="48" height="48" />
                 <span class:list={['club', { won: g.played && (g.margin ?? 0) > 0 }]}>{teams[g.home]!.nick}</span>
-                {g.played && <span class="pts num">{g.home_score}</span>}
+                {g.played && <span class="pts num spoil">{g.home_score}</span>}
               </span>
               <span class="foot">
                 {/* A played game is placed by when it happened; one still to
@@ -129,7 +131,7 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
                     nothing here, where a finished game is the only kind there
                     is in the block. */}
                 {g.played
-                  ? <>{g.weekday.slice(0, 3)} {shortDate(g.date)}{g.ot ? <> · OT</> : null}</>
+                  ? <>{g.weekday.slice(0, 3)} {shortDate(g.date)}{g.ot ? <span class="spoil-gone"> · OT</span> : null}</>
                   : <>{dayOf(g.weekday)}{g.kickoff} ET</>}
                 {g.div && <span class="div">Div</span>}
               </span>
@@ -149,6 +151,12 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
 </Base>
 
 <style>
+  /* Spoilers off. The winner's name is set heavier than the loser's, which on
+     its own would still say who won every game on the page. */
+  :global(html[data-spoilers='off']) .club.won { font-weight: inherit; color: inherit; }
+  /* A bar the height of a crest, not of a line of type. */
+  .crests.spoil { --spoil-w: 5.2em; min-height: 26px; }
+
   /* The band belongs to the heading above it and not to the weeks below, so it
      sits close under one and well clear of the other. The section's own 72px
      had it the other way about. */

@@ -242,3 +242,13 @@
 
 /* Hidden when the screen was reached without a pair to compare. */
 .picker[hidden] { display: none; }
+
+/* ── Spoilers off ───────────────────────────────────────────────────────── */
+html[data-spoilers='off'] .stage-note {
+  margin-top: clamp(22px, 3vw, 34px);
+  padding: clamp(18px, 2.4vw, 28px);
+  border-color: var(--ks-instrument-rule);
+  color: var(--ks-instrument-muted);
+  max-width: 560px;
+}
+.stage-note p { margin: 0 0 16px; line-height: 1.5; }

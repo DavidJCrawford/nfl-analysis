@@ -1,10 +1,15 @@
 ---
-interface Props { label: string; value: string | number; }
-const { label, value } = Astro.props;
+interface Props {
+  label: string;
+  value: string | number;
+  /** A result rather than a fact — blacked out when spoilers are off. */
+  spoil?: boolean;
+}
+const { label, value, spoil = false } = Astro.props;
 ---
 <div class="stat">
   <div class="eyebrow">{label}</div>
-  <div class="value num">{value}</div>
+  <div class:list={['value num', { spoil }]}>{value}</div>
 </div>
 
 <style>

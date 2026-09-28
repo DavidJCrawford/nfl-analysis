@@ -2,6 +2,7 @@
 import { Font } from 'astro:assets';
 import { u } from '@lib/url';
 import '@styles/base.css';
+import '@styles/spoilers.css';
 
 interface Props {
   title: string;
@@ -27,6 +28,58 @@ const path = Astro.url.pathname;
 <html lang="en-GB">
   <head>
     <meta charset="utf-8" />
+    {/* Spoilers. Inline and synchronous, ahead of everything else, because
+        the question of whether a score may be shown has to be answered
+        before the first frame is painted rather than after — a result that
+        flashes up and is then covered has still been seen.
+
+        The address is the setting: `?spoilers=off`, so the unspoilt site
+        can be bookmarked. The tab's sessionStorage is a backstop, not a
+        second source of truth. Without it the Back button would return a
+        reader to a page they visited before switching spoilers off, with
+        its address — and so its scores — as they were. With it, that page
+        is switched off too and its address corrected to say so.
+
+        Everything the rest of the site needs is on window.nflSpoilers. */}
+    <script is:inline>
+      (function () {
+        var KEY = 'nfl-spoilers';
+        function read() {
+          var v = new URLSearchParams(location.search).get('spoilers');
+          var off = v === 'off';
+          try {
+            if (v === 'off') sessionStorage.setItem(KEY, 'off');
+            else if (v === 'on') sessionStorage.removeItem(KEY);
+            else if (sessionStorage.getItem(KEY) === 'off') off = true;
+          } catch (e) {}
+          return off;
+        }
+        function apply(off) {
+          var root = document.documentElement;
+          if (off) root.setAttribute('data-spoilers', 'off');
+          else root.removeAttribute('data-spoilers');
+          var q = new URLSearchParams(location.search);
+          if (off) q.set('spoilers', 'off'); else q.delete('spoilers');
+          var qs = q.toString();
+          var next = location.pathname + (qs ? '?' + qs : '') + location.hash;
+          if (next !== location.pathname + location.search + location.hash) {
+            history.replaceState(history.state, '', next);
+          }
+        }
+        window.nflSpoilers = {
+          off: function () { return document.documentElement.getAttribute('data-spoilers') === 'off'; },
+          set: function (off) {
+            try { if (off) sessionStorage.setItem(KEY, 'off'); else sessionStorage.removeItem(KEY); } catch (e) {}
+            apply(off);
+            document.dispatchEvent(new CustomEvent('spoilers', { detail: { off: off } }));
+          },
+          resync: function () { apply(read()); },
+        };
+        apply(read());
+      })();
+    </script>
+    {/* A switch that cannot work should not be offered. */}
+    <noscript><style>.spoiler-switch { display: none !important; }</style></noscript>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title} · NFL Analysis</title>
     <meta name="description" content={description} />
@@ -48,18 +101,82 @@ const path = Astro.url.pathname;
           <img class="shield" src={u('/nfl.webp')} alt="" width="47" height="64" />
           <span>NFL Analysis</span>
         </a>
-        <nav aria-label="Sections">
-          {NAV.map((item) => (
-            <a class="plain nav-link" href={u(item.href)}
-               aria-current={path.startsWith(u(item.href)) ? 'page' : undefined}>{item.label}</a>
-          ))}
-        </nav>
+        <div class="tools">
+          {/* A setting, not a section, so it sits outside the navigation
+              landmark and is set apart from it by a rule. */}
+          <button class="spoiler-switch" type="button" role="switch" aria-checked="true" data-spoiler-switch>
+            <span>Spoilers</span>
+            <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span>
+          </button>
+          <nav aria-label="Sections">
+            {NAV.map((item) => (
+              <a class="plain nav-link" href={u(item.href)}
+                 aria-current={path.startsWith(u(item.href)) ? 'page' : undefined}>{item.label}</a>
+            ))}
+          </nav>
+        </div>
       </div>
       <hr class="rule" />
     </header>
     )}
 
     <main id="main"><slot /></main>
+
+    <script>
+      /* Keeping the setting as a reader moves around.
+
+         Every internal link is rewritten to carry `?spoilers=off` when it is
+         on and to drop it when it is not — including the links scripts build
+         after the page has loaded, the comparison dialog's and the compare
+         screens', which a MutationObserver picks up as they appear. A link
+         that was missed would be a way back to the scores with one click. */
+      const S = (window as any).nflSpoilers as { off(): boolean; set(off: boolean): void; resync(): void };
+      const BASE = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+
+      function retag(a: HTMLAnchorElement): void {
+        const raw = a.getAttribute('href');
+        if (!raw || raw.startsWith('//') || !raw.startsWith(BASE)) return;
+        const url = new URL(raw, location.origin);
+        if (S.off()) url.searchParams.set('spoilers', 'off');
+        else url.searchParams.delete('spoilers');
+        const next = url.pathname + url.search + url.hash;
+        // Only when it differs — the observer below watches href, and an
+        // unconditional write would wake it again, forever.
+        if (next !== raw) a.setAttribute('href', next);
+      }
+      const retagAll = (root: ParentNode = document) =>
+        root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(retag);
+
+      const sw = document.querySelector<HTMLButtonElement>('[data-spoiler-switch]');
+      function sync(): void {
+        sw?.setAttribute('aria-checked', String(!S.off()));
+        retagAll();
+      }
+      sw?.addEventListener('click', () => S.set(!S.off()));
+      // The compare screens have no masthead, so no switch; they carry their
+      // own way back instead.
+      document.querySelectorAll('[data-show-spoilers]')
+        .forEach((b) => b.addEventListener('click', () => S.set(false)));
+      document.addEventListener('spoilers', sync);
+      // A page restored from the back-forward cache runs none of its scripts
+      // again, so it would come back exactly as it was left.
+      addEventListener('pageshow', () => { S.resync(); sync(); });
+
+      new MutationObserver((changes) => {
+        for (const c of changes) {
+          if (c.type === 'attributes') {
+            if (c.target instanceof HTMLAnchorElement) retag(c.target);
+            continue;
+          }
+          c.addedNodes.forEach((n) => {
+            if (n instanceof HTMLAnchorElement) retag(n);
+            if (n instanceof Element) retagAll(n);
+          });
+        }
+      }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['href'] });
+
+      sync();
+    </script>
   </body>
 </html>
 
@@ -101,6 +218,7 @@ const path = Astro.url.pathname;
     letter-spacing: 0.18em; text-transform: uppercase;
     font-weight: 500; color: var(--ks-ink);
   }
+  .tools { display: flex; align-items: baseline; gap: clamp(14px, 2vw, 26px); }
   nav { display: flex; gap: clamp(14px, 2vw, 26px); }
   .nav-link {
     font-size: var(--ks-type-ui-size); letter-spacing: 0.12em;

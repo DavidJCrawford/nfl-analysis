@@ -32,6 +32,7 @@ human eye. `--strict` makes those stop the run rather than just report.
 | `/players/` · `/players/00-0033873/` | the league's leaders and every name; one player's life, season and games |
 | `/compare/teams/` · `/compare/players/` | two clubs or two players side by side |
 | `/credits/` | sources and terms |
+| `?spoilers=off` | on any page: every result and standing blacked out, so the replay is the only way to find out |
 
 There is no `/games/` index: the front page is that list. A game page lives at a
 permanent URL from the moment the schedule does — a fixture before kickoff, the

@@ -46,13 +46,25 @@ for (const abbr of order) {
             {d.teams.map((abbr) => {
               const t = teams[abbr]!;
               const p = points.get(abbr)!;
+              // Where this club falls alphabetically within its division.
+              // With spoilers off the list is laid out in that order instead —
+              // it is sorted by record otherwise, and a table of four blacked-out
+              // records in standings order is still the standings.
+              // By the name on the screen, not the abbreviation: sorted by
+              // abbreviation the AFC East reads Bills, Dolphins, Patriots, Jets,
+              // which is no order a reader would recognise — and an order that
+              // looks arbitrary is one that invites the question of whether it is
+              // the table after all.
+              const alpha = [...d.teams]
+                .sort((x, y) => teams[x]!.nick.localeCompare(teams[y]!.nick))
+                .indexOf(abbr);
               return (
-                <li>
+                <li style={`--alpha:${alpha}`}>
                   <a class="plain row" href={u(`/teams/${abbr}/`)}>
                     <span class="spine" style={`background:${t.color}`} aria-hidden="true"></span>
                     <span class="nick">{t.nick}</span>
-                    <span class="rec num">{record(records.get(abbr)!)}</span>
-                    <span class="pts num">{p.played ? `${p.for}–${p.against}` : '—'}</span>
+                    <span class="rec num spoil">{record(records.get(abbr)!)}</span>
+                    <span class="pts num spoil">{p.played ? `${p.for}–${p.against}` : '—'}</span>
                   </a>
                 </li>
               );
@@ -72,6 +84,8 @@ for (const abbr of order) {
   }
   .division .title { padding-bottom: 6px; border-bottom: 1px solid var(--ks-edge); letter-spacing: 0.04em; }
   .division ol { list-style: none; margin: 0; padding: 0; }
+  :global(html[data-spoilers='off']) .division ol { display: flex; flex-direction: column; }
+  :global(html[data-spoilers='off']) .division li { order: var(--alpha); }
   .row {
     position: relative;
     display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline;

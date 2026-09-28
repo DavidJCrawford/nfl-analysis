@@ -137,6 +137,12 @@ a passing chart, and the site should not imply otherwise.
 /credits/               Sources and terms
 ```
 
+Any page above takes `?spoilers=off`, which blacks out every result and
+standing on it, so the only way to learn how a game went is to watch its
+replay. The switch is in the masthead beside Teams and defaults to on. It is a
+URL parameter rather than a stored preference so that the unspoilt site can be
+bookmarked; every internal link carries it while it is set.
+
 Both are built as the replay is: a dark stage filling the viewport with one way
 out of it, in the top right corner. They are screens rather than documents, so
 they carry no masthead — Close goes back where the reader came from, and to the

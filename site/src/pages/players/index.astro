@@ -66,7 +66,13 @@ const letters = [...new Set(directory.map((p) => (p.last ?? p.name)[0]!.toUpperC
     </p>
   </div>
 
-  <div class="wrap section boards">
+  <div class="wrap section spoil-lead">
+    <p class="spoil-note">
+      The leaderboards are hidden while spoilers are off. Everyone is still listed below.
+    </p>
+  </div>
+
+  <div class="wrap section boards spoil-block">
     {boards.map((b) => (
       <section class="board">
         <header class="bhead">
@@ -121,6 +127,9 @@ const letters = [...new Set(directory.map((p) => (p.last ?? p.name)[0]!.toUpperC
 </Base>
 
 <style>
+  .spoil-lead { display: none; }
+  :global(html[data-spoilers='off']) .spoil-lead { display: block; padding-block: clamp(10px, 1.4vw, 18px) 0; }
+
   .intro { padding-bottom: clamp(14px, 2vw, 24px); }
 
   .boards {

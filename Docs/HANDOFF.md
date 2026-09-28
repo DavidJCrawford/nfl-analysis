@@ -321,6 +321,59 @@ Careful of:
   and caption both come from the play's own row, which is post-play. Stepping
   and scrubbing deliberately reveal everything; playback does not.
 
+## 5a. Spoilers off
+
+`?spoilers=off` hides every result and standing on the site. The replay is
+the one thing left untouched, and it is the point: it is how you find out.
+
+**The rule for anything added later: a result must be marked, or it leaks.**
+Nothing hides itself. Three classes, in `src/styles/spoilers.css`:
+
+- `.spoil` — a value (a score, a record, a statistic). Drawn over with a bar of
+  **fixed** width. Sized to its contents, a bar over a 3 would be half the
+  width of one over a 34, and a row of them would read as a row of scores.
+  `.spoil.wide` for a longer value; `--spoil-w` to size one by hand.
+- `.spoil-gone` — something whose *presence* is the result: "OT" on a card, the
+  linescore (an overtime game has one more column). Removed without a trace,
+  because a bar in its place would mark which games had one.
+- `.spoil-block` — a section that is nothing but results, with a
+  `.spoil-note` beside it saying so.
+
+`<Stat spoil …>` covers a stat's value. Hidden text uses `visibility: hidden`,
+so it is also unselectable, missed by find-in-page and absent from the
+accessibility tree; the bar announces itself as "hidden".
+
+Leaks that are not text, found while building it:
+
+- **An order can be a standing.** The teams index sorts each division by
+  record, so four blacked-out records in standings order are still the
+  standings. With spoilers off each list is re-laid by nickname via CSS
+  `order`. `getTeamOrder()` sorts by record — anything new that uses it for
+  display needs the same treatment.
+- **Emphasis is a result.** The winner's name is set heavier on a card; that
+  is neutralised too.
+- **The replay's scrubber drew "OT" from kickoff.** Quarter dividers were
+  drawn for every frame, ungated, so an overtime game said so before the first
+  snap. The overtime divider now appears when the replay reaches it — for
+  everyone, not only with spoilers off, since the replay already had a rule
+  against showing a score before it happens.
+
+How the setting holds:
+
+- A synchronous script first in `<head>` sets `data-spoilers="off"` on `<html>`
+  before anything is painted, so a score never flashes up and is covered.
+- Every internal link is rewritten to carry the parameter, and a
+  MutationObserver catches links scripts build later (the compare screens').
+- The tab's sessionStorage is a backstop. Without it, Back returns a reader to
+  a page visited before switching off, with its old address and its scores.
+  `pageshow` re-applies it to pages restored from the back-forward cache.
+- It needs JavaScript. Without it the switch is hidden and the parameter is
+  ignored — on a static host there is nothing else to read it with.
+
+The leak audit worth re-running after any page change: load a page with
+`?spoilers=off` and search `document.body.innerText` for digits either side of
+a dash. `innerText` skips hidden text, so anything it finds is on screen.
+
 ## 6. The weekly refresh
 
 ```bash

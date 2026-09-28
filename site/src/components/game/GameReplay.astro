@@ -90,22 +90,29 @@ const payload = {
 
 <div class="replay-mount">
   <div class="cue">
-    <p class="cue-note">{note}</p>
+    <p class="cue-note spoil-gone">{note}</p>
     <button class="open" type="button" data-replay-open>Replay this game</button>
   </div>
 
   {/* The replay's own strip, drawn once on the page as the last play leaves
       it. The shape of the game without opening anything. */}
-  <div class="still instrument">
+  {/* Hidden whole when spoilers are off: it is the game from first play to
+      last, every score on it. A ResizeObserver on this box redraws it the
+      moment it has a size again, so switching spoilers back on shows it
+      drawn rather than blank. */}
+  <div class="still instrument spoil-block">
     <canvas data-strip-still role="img"
             aria-label={`Where the ball was through the game, play by play — ${away.nick} at ${home.nick}`}
     ></canvas>
   </div>
+  <p class="spoil-note">
+    How this game went is hidden while spoilers are off. The replay is the way to find out.
+  </p>
 
   {/* What the market expected of the game the strip has just drawn, under the
       strip and under the figure above it that scores the difference. */}
   {spread && (
-    <p class="market">
+    <p class="market spoil-gone">
       The market had {spread.expected === 0 ? 'the game level' : <>
         {spread.expected > 0 ? home.nick : away.nick} by {Math.abs(spread.expected)}</>};
       it finished {winner ? <>{teams[winner]!.nick} by {Math.abs(spread.actual)}</> : 'tied'}.

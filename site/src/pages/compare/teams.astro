@@ -28,7 +28,15 @@ const order = getTeamOrder();
         <h1 class="stage-title">Compare clubs</h1>
       </header>
 
-      <div class="board" data-compare>
+      {/* Reached with spoilers off — by a bookmark, since the buttons that
+          open it are not shown then — the whole board goes. There is nothing
+          on it that is not a result. */}
+      <div class="spoil-note stage-note">
+        <p>Comparing two seasons means showing their results, so this screen is empty while spoilers are off.</p>
+        <button class="go" type="button" data-show-spoilers>Show spoilers</button>
+      </div>
+
+      <div class="board spoil-block" data-compare>
         {/* One control. The club on the left is the one whose page this was
             opened from, and it stays put — swapping two things that are
             already both on screen rearranges the picture without changing what
@@ -159,7 +167,11 @@ const order = getTeamOrder();
   }
 
   function go(a: string, b: string, push = true): void {
-    if (push) history.pushState({ a, b }, '', `?a=${a}&b=${b}`);
+    if (push) {
+      const q = new URLSearchParams({ a, b });
+      if ((window as any).nflSpoilers?.off()) q.set('spoilers', 'off');
+      history.pushState({ a, b }, '', `?${q}`);
+    }
     paint(a, b);
   }
 

@@ -1,0 +1,92 @@
+/* Spoilers off.
+ *
+ * One attribute on <html>, set by a script in <head> before anything is
+ * painted, and everything below keys off it — so there is never a frame in
+ * which a score is visible and then covered. See Base.astro.
+ *
+ * Three treatments, chosen by what the thing being hidden is.
+ *
+ *   .spoil        a value: a score, a record, a statistic. Drawn over with a
+ *                 bar, the way a redacted document is, so the page keeps its
+ *                 shape and it is plain that something is there.
+ *   .spoil-gone   something whose mere presence is the spoiler — an "OT" on a
+ *                 card, the overtime column of a linescore. It goes without a
+ *                 trace, because a bar in its place would only mark which
+ *                 games had one.
+ *   .spoil-block  a section that is nothing but results. Removed, and a
+ *                 .spoil-note beside it says so.
+ */
+
+:root { --spoil-ink: oklch(22% 0 0); }
+.instrument, .stage { --spoil-ink: oklch(40% 0 0); }
+
+/* The bar is a fixed width, not the width of what it covers. Sized to its
+   contents, a bar over a 3 would be half the width of one over a 34, and a
+   row of them would read as a row of scores to anyone who looked — a
+   shutout, a blowout, told apart by nothing but ink. */
+html[data-spoilers='off'] .spoil {
+  display: inline-block;
+  width: var(--spoil-w, 2.4em);
+  white-space: nowrap;
+  /* visibility, not opacity or colour: hidden text is also unselectable,
+     unfound by find-in-page and absent from the accessibility tree, so the
+     result cannot be read by copying the page or by hearing it. */
+  visibility: hidden;
+  position: relative;
+  text-align: left;
+}
+html[data-spoilers='off'] .spoil::after {
+  content: '';
+  content: '' / 'hidden';
+  visibility: visible;
+  position: absolute; inset: 0.22em 0;
+  background: var(--spoil-ink);
+  border-radius: 3px;
+}
+html[data-spoilers='off'] .spoil.wide { --spoil-w: 4.6em; }
+
+html[data-spoilers='off'] .spoil-gone,
+html[data-spoilers='off'] .spoil-block { display: none !important; }
+
+.spoil-note { display: none; }
+html[data-spoilers='off'] .spoil-note {
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--ks-rule);
+  border-radius: var(--ks-radius-md);
+  font-size: var(--ks-type-ui-size);
+  color: var(--ks-text-muted);
+}
+
+/* ── The switch ─────────────────────────────────────────────────────────────
+ * Small, and set in the navigation's own type so it reads as part of the
+ * masthead rather than as a banner. Its look follows the attribute on <html>
+ * rather than its own aria-checked, which a script sets a moment later — so
+ * a page opened with spoilers off shows the switch off from the first frame. */
+.spoiler-switch {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 0; padding: 0 clamp(14px, 2vw, 26px) 0 0;
+  border: 0; border-right: 1px solid var(--ks-rule);
+  background: none; cursor: pointer;
+  font: inherit; font-size: var(--ks-type-ui-size);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ks-text-muted);
+}
+.spoiler-switch:hover { color: var(--ks-ink); }
+.spoiler-switch:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 4px; border-radius: 2px; }
+.sw-track {
+  position: relative; flex: none;
+  width: 24px; height: 13px; border-radius: var(--ks-radius-pill);
+  background: var(--ks-ink);
+  transition: background var(--ks-quick) var(--ks-ease), box-shadow var(--ks-quick) var(--ks-ease);
+}
+.sw-knob {
+  position: absolute; top: 2px; left: 13px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ks-paper);
+  transition: left var(--ks-quick) var(--ks-ease), background var(--ks-quick) var(--ks-ease);
+}
+html[data-spoilers='off'] .sw-track { background: transparent; box-shadow: inset 0 0 0 1px var(--ks-text-mute-deep); }
+html[data-spoilers='off'] .sw-knob { left: 2px; background: var(--ks-text-mute-deep); }
+@media (prefers-reduced-motion: reduce) { .sw-track, .sw-knob { transition: none; } }

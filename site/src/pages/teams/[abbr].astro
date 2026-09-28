@@ -131,10 +131,10 @@ const STATUS: Record<string, string> = {
     </div>
 
     <div class="stats">
-      <Stat label="Record" value={record(rec)} />
-      <Stat label="Points for" value={pointsFor} />
-      <Stat label="Points against" value={pointsAgainst} />
-      <Stat label="Differential" value={signed(pointsFor - pointsAgainst)} />
+      <Stat spoil label="Record" value={record(rec)} />
+      <Stat spoil label="Points for" value={pointsFor} />
+      <Stat spoil label="Points against" value={pointsAgainst} />
+      <Stat spoil label="Differential" value={signed(pointsFor - pointsAgainst)} />
     </div>
 
     <p class="lead measure" style="margin-top:28px">
@@ -150,7 +150,10 @@ const STATUS: Record<string, string> = {
       <hr class="rule" />
       <section class="wrap section" aria-labelledby="doing">
         <h2 id="doing" class="headline">What they have done</h2>
-        <div class="sides">
+        <p class="spoil-note" style="margin-top:22px">
+          A season's totals are its results added up, so they are hidden while spoilers are off.
+        </p>
+        <div class="sides spoil-block">
           <div class="side">
             <h3 class="sname">Offence</h3>
             <div class="stats compact">
@@ -204,7 +207,7 @@ const STATUS: Record<string, string> = {
               <span class="outcome num">
                 {r.result === null
                   ? <span class="tbd">{r.g.kickoff} ET</span>
-                  : <><span class={`res ${r.result}`}>{r.result}</span> {r.own}<span class="sep">–</span>{r.other}</>}
+                  : <span class="spoil wide"><span class={`res ${r.result}`}>{r.result}</span> {r.own}<span class="sep">–</span>{r.other}</span>}
               </span>
             </a>
           </li>
@@ -243,7 +246,9 @@ const STATUS: Record<string, string> = {
                         {p.status !== 'ACT' && <> · {STATUS[p.status] ?? p.status}</>}
                       </span>
                     </span>
-                    <span class="tally num">{line(p) ?? <span class="muted">—</span>}</span>
+                    {/* Every row is covered, the dashes too — covering only the
+                        men with a line would mark which of them had played. */}
+                    <span class="tally num spoil wide">{line(p) ?? <span class="muted">—</span>}</span>
                   </a>
                 </li>
               ))}

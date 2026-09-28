@@ -30,7 +30,9 @@ const teams = getTeams();
 const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
 ---
 
-<button class="compare-open" type="button" data-compare-open>Compare</button>
+{/* Not offered with spoilers off: a comparison is two seasons' results side
+    by side, and the screen it opens is empty until they are shown. */}
+<button class="compare-open spoil-gone" type="button" data-compare-open>Compare</button>
 
 <dialog
   class="compare-dialog"

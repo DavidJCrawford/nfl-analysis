@@ -84,9 +84,9 @@ const formOf = (abbr: string) =>
         <div class="figures">
           {row.played ? (
             <>
-              <span class:list={['pts num', { won: winner === row.away }]}>{row.away_score}</span>
+              <span class:list={['pts num spoil', { won: winner === row.away }]}>{row.away_score}</span>
               <span class="dash" aria-hidden="true">–</span>
-              <span class:list={['pts num', { won: winner === row.home }]}>{row.home_score}</span>
+              <span class:list={['pts num spoil', { won: winner === row.home }]}>{row.home_score}</span>
             </>
           ) : (
             <span class="kick num">{row.kickoff}<span class="tz">ET</span></span>
@@ -102,7 +102,7 @@ const formOf = (abbr: string) =>
       </div>
 
       {row.played && game && (
-        <table class="linescore num">
+        <table class="linescore num spoil-block">
           <caption class="visually-hidden">Score by quarter</caption>
           <thead>
             <tr>
@@ -153,20 +153,24 @@ const formOf = (abbr: string) =>
 
         <section class="wrap section" aria-labelledby="log">
           <h2 id="log" class="headline">Plays</h2>
-          <div style="margin-top:28px"><PlayLog game={game} teams={teams} /></div>
+          <div class="spoil-block" style="margin-top:28px"><PlayLog game={game} teams={teams} /></div>
+          <p class="spoil-note" style="margin-top:22px">Every play is hidden while spoilers are off.</p>
         </section>
 
         <hr class="rule" />
 
         <section class="wrap section totals" aria-labelledby="box">
           <h2 id="box" class="headline">Totals</h2>
-          <div class="box-wrap"><BoxScore game={game} /></div>
-          <div style="margin-top:48px"><PlayerLines game={game} /></div>
-          <p class="small muted" style="margin-top:20px">
-            Rushing lines with a single carry and receiving lines with no catch are left out;
-            everything else is here. Two-point plays are excluded from the attempt counts,
-            as they are on any box score.
-          </p>
+          <div class="spoil-block">
+            <div class="box-wrap"><BoxScore game={game} /></div>
+            <div style="margin-top:48px"><PlayerLines game={game} /></div>
+            <p class="small muted" style="margin-top:20px">
+              Rushing lines with a single carry and receiving lines with no catch are left out;
+              everything else is here. Two-point plays are excluded from the attempt counts,
+              as they are on any box score.
+            </p>
+          </div>
+          <p class="spoil-note" style="margin-top:22px">The box score is hidden while spoilers are off.</p>
         </section>
       </>
     ) : (
@@ -200,7 +204,7 @@ const formOf = (abbr: string) =>
             <div class="form-side">
               <h3 class="title">
                 {teams[abbr]!.nick}
-                <span class="rec num">{record(records.get(abbr)!)}</span>
+                <span class="rec num spoil">{record(records.get(abbr)!)}</span>
               </h3>
               {formOf(abbr).length === 0 ? (
                 <p class="small muted">No games played yet this season.</p>
@@ -209,9 +213,9 @@ const formOf = (abbr: string) =>
                   {formOf(abbr).map((f) => (
                     <li>
                       <a class="plain" href={gameUrl(f.g.id)}>
-                        <span class:list={['res', { w: f.w, t: f.t }]}>{f.t ? 'T' : f.w ? 'W' : 'L'}</span>
+                        <span class:list={['res spoil', { w: f.w, t: f.t }]} style="--spoil-w:1.2em">{f.t ? 'T' : f.w ? 'W' : 'L'}</span>
                         <span class="opp">{f.atHome ? '' : '@'}{f.opp}</span>
-                        <span class="sc num">{f.own}–{f.other}</span>
+                        <span class="sc num spoil" style="--spoil-w:3.4em">{f.own}–{f.other}</span>
                       </a>
                     </li>
                   ))}
@@ -226,6 +230,10 @@ const formOf = (abbr: string) =>
 </Base>
 
 <style>
+  /* Spoilers off. At the header's display size the default bar is a slab;
+     this is the width of two digits in this face, which is what a score is. */
+  .figures .pts.spoil { --spoil-w: 1.25em; }
+
   .head { padding-bottom: clamp(24px, 3vw, 40px); }
 
   .score-line {
