@@ -167,6 +167,15 @@ itself. Assume every refresh can change the past, which is why `update.py`
 diffs the old JSON against the new and reports any already-published game that
 moved — see §6.
 
+The commonest revision is not a revision. nflverse publishes a game's plays
+first and its details a day later: the day after week 3, thirteen published
+games gained a referee, a surface and (outdoors) a temperature and wind where
+there had been nothing, and not one other field in them moved. `update.py`
+reports a blank filled in as a line of information and keeps the warning for a
+value that was there and has changed — otherwise the warning would go off every
+week for something needing no judgement, and a warning that always fires is
+one nobody reads.
+
 **nflverse sets `pass_attempt` on a sack.** It marks a dropback, not an
 official attempt, and no box score the NFL prints counts a sack as a pass
 attempt. Taking the flag at face value inflated every club's attempts by its

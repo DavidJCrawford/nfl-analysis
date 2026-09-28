@@ -97,6 +97,27 @@ def fields(old, new, at: str = "") -> collections.Counter:
     return hits
 
 
+def only_filled(old, new) -> bool:
+    """True if every difference is a blank being filled in.
+
+    nflverse publishes a game and fills in its details later: the day after
+    week 3, thirteen published games had their referee, surface, temperature
+    and wind arrive where there had been nothing — and nothing else in any of
+    them changed. That is not the past being rewritten; a reader saw a blank
+    there before. So it is reported, and not raised as a warning, which would
+    otherwise go off every single week for something that needs no judgement."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        for k in set(old) | set(new):
+            if k not in old or old[k] is None:
+                continue                      # nothing was there before
+            if k not in new or not only_filled(old[k], new[k]):
+                return False
+        return True
+    if isinstance(old, list) and isinstance(new, list):
+        return len(old) == len(new) and all(only_filled(a, b) for a, b in zip(old, new))
+    return old == new or old is None
+
+
 def summarise(hits: collections.Counter, limit: int = 4) -> str:
     top = hits.most_common(limit)
     tail = len(hits) - len(top)
@@ -179,8 +200,16 @@ def report(before: dict[str, bytes], strict: bool) -> bool:
 
     # Anything that was already on the site and is not what it was.
     # Only games. A player file changing is what a week of football looks
-    # like; a published game changing is not.
-    republished = [r for r in revised if r.startswith("games/")]
+    # like; a published game changing is not — unless all that changed is a
+    # blank that has been filled in.
+    touched = [r for r in revised if r.startswith("games/")]
+    filled = [r for r in touched if only_filled(json.loads(before[r]), json.loads(after[r]))]
+    republished = [r for r in touched if r not in filled]
+    if filled:
+        tally: collections.Counter = collections.Counter()
+        for r in filled:
+            tally += fields(json.loads(before[r]), json.loads(after[r]))
+        print(f"\n  {len(filled)} published game(s) had blanks filled in, nothing else: {summarise(tally, 6)}")
     if republished:
         print(f"\n\033[1;33m⚠ {len(republished)} already-published game(s) revised by nflverse\033[0m")
         print("  \033[2mThese were live on the site and have been rewritten. Read them before pushing.\033[0m")
