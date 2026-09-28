@@ -25,21 +25,25 @@ import { gameUrl, u } from '@lib/url';
 const schedule = getSchedule();
 const teams = getTeams();
 
-/** Every week down to the one being played, newest first.
+/** Every week that has a result, and the week after it, newest first.
  *
- *  The board ends at the first week that is not finished — the week in hand —
- *  so it always closes on a block of fixtures a reader can still look forward
- *  to, and never on a week that has not been scheduled into view yet.
+ *  So whenever results come in, the next week's fixtures are already up
+ *  beside them: a refresh after week 3's games shows week 4 as placeholders,
+ *  whether or not week 3's Monday-night game has been played yet.
  *
- *  Deliberately the first *incomplete* week and not the last played one: a
- *  Thursday-night game does not make the week over, and keying off it would put
- *  next week's fixtures on the front page on a Friday, three days early. When
- *  the season finishes, every week is complete and the whole board shows.
+ *  It used to stop at the first week that was not finished, which kept the
+ *  next week back until the last game of this one had a final score — and a
+ *  refresh on a Monday, with the Sunday-night final not yet published and the
+ *  Monday game still to come, showed no week ahead at all. The board is
+ *  meant to close on what a reader can look forward to.
+ *
+ *  Before anything is played it is week 1 on its own; at the end of the
+ *  season, the whole board.
  *
  *  slice() copies, so reversing it leaves the cached week list alone. */
 const all = getWeeks();
-const current = all.findIndex((w) => !w.complete);
-const weeks = all.slice(0, current === -1 ? all.length : current + 1).reverse();
+const lastPlayed = all.reduce((n, w, k) => (w.played > 0 ? k : n), -1);
+const weeks = all.slice(0, Math.min(all.length, lastPlayed + 2)).reverse();
 
 /** The top of each division, as it actually stands.
  *

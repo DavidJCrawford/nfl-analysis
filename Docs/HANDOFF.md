@@ -407,12 +407,16 @@ at all:
 - **It edits no source file.** The front page used to carry a hand-held count of
   how many weeks to show, which would have forced this script to patch a page's
   frontmatter by regex. That count is now derived — `index.astro` runs the board
-  down to the first week that is not complete — so the job is data in, pages
-  out, and `update.py` only ever writes to `site/data/`.
-- **First *incomplete* week, not last played.** Keying the board off the last
-  played week would publish next week's fixtures on a Friday, because a
-  Thursday-night game would have completed the week. The season ends with every
-  week complete, so the whole board shows.
+  to one week past the latest week with a result — so the job is data in,
+  pages out, and `update.py` only ever writes to `site/data/`.
+- **Next week's fixtures are always up.** Every refresh leaves the week after
+  the latest results on the board as placeholders. This was once "down to the
+  first unfinished week", which held the next week back until the last game
+  of the current one had a final — and a Monday refresh, with the Sunday-night
+  final unpublished and the Monday game unplayed, showed no week ahead at all.
+  Asked for plainly on 2026-09-28: whenever `make week` runs, the next week's
+  placeholders go up with it. Before a game is played it is week 1 alone; at
+  the end of the season, the whole board.
 - **It does not commit.** What to say about a week is a judgement, and so is the
   one thing it exists to surface.
 - **It diffs the old JSON against the new** and names any already-published game

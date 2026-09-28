@@ -18,8 +18,9 @@ make preview
 ```
 
 `make week` is the whole in-season routine. Nothing in the site is hand-held to
-a particular week — the front page runs to whichever week is being played, read
-off the data — so a week of results lands without any source file being edited.
+a particular week — the front page runs to the week after the latest results,
+read off the data — so a week of results lands, with next week's fixtures beside
+it, without any source file being edited.
 It ends by reporting what moved, including any **already-published game that
 nflverse has since rewritten**, which is the one part of the job that wants a
 human eye. `--strict` makes those stop the run rather than just report.
