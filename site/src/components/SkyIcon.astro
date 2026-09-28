@@ -1,0 +1,52 @@
+---
+/** The sky, drawn in the site's own line — one stroke weight, currentColor,
+ *  no fill — rather than as emoji, which every platform draws differently and
+ *  none of them in the style of anything else on the page.
+ *
+ *  `indoor` is a roof. `wind` is a mark for wind and not an arrow. An arrow
+ *  was tried and taken out: nothing in the data says which way a stadium
+ *  faces, so "up" on the screen is not north, and an arrow drawn by compass
+ *  bearing pointed a direction that meant nothing on the field — while a
+ *  south-easterly, blowing toward the north-west, set an arrow pointing one
+ *  way beside the letters "SE" pointing the other. The direction is given in
+ *  words instead. */
+interface Props {
+  kind: 'sun' | 'partly' | 'cloud' | 'rain' | 'snow' | 'fog' | 'indoor' | 'wind' | null | undefined;
+  size?: number;
+  class?: string;
+}
+const { kind, size = 18, class: cls = '' } = Astro.props;
+---
+{kind && (
+  <svg class:list={['sky', cls]} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+       fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    {kind === 'sun' && (<>
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" />
+    </>)}
+    {kind === 'partly' && (<>
+      <circle cx="9" cy="9" r="3.3" />
+      <path d="M9 2.8v1.5M3 9h1.5M4.8 4.8l1 1M13.2 4.8l-1 1" />
+      <path d="M8.5 19h9a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.5 19z" />
+    </>)}
+    {kind === 'cloud' && <path d="M7 18.5h10.5a4 4 0 0 0 .4-8 5.8 5.8 0 0 0-11.1 1.4A3.4 3.4 0 0 0 7 18.5z" />}
+    {kind === 'rain' && (<>
+      <path d="M7 14.5h10.5a4 4 0 0 0 .4-8 5.8 5.8 0 0 0-11.1 1.4A3.4 3.4 0 0 0 7 14.5z" />
+      <path d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3" />
+    </>)}
+    {kind === 'snow' && (<>
+      <path d="M7 14.5h10.5a4 4 0 0 0 .4-8 5.8 5.8 0 0 0-11.1 1.4A3.4 3.4 0 0 0 7 14.5z" />
+      <path d="M8 18.5h.01M12 20h.01M16 18.5h.01" stroke-width="2.4" />
+    </>)}
+    {kind === 'fog' && <path d="M4 9h16M3 13h18M5 17h14" />}
+    {kind === 'indoor' && (<>
+      <path d="M3 11.5 12 5l9 6.5" />
+      <path d="M5.5 10v9h13v-9" />
+    </>)}
+    {kind === 'wind' && <path d="M3 9h11a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h7" />}
+  </svg>
+)}
+
+<style>
+  .sky { display: inline-block; flex: none; vertical-align: -0.2em; }
+</style>

@@ -209,6 +209,9 @@ def game_row(g: dict) -> dict:
         "roof": s(g, "roof"),
         # spread_line is home-relative and positive when the home team is
         # favoured: 3 means "home by 3". Kept in that orientation throughout.
+        # Named on the front-page card. Crews are assigned the week of the
+        # game, so an unplayed game far off has none yet.
+        "referee": s(g, "referee"),
         "spread": f(g, "spread_line", 1),
         "total_line": f(g, "total_line", 1),
         "away_rest": i(g, "away_rest"),
@@ -935,7 +938,81 @@ def mark_respots(plays: list[dict], notes: list[str]) -> None:
         prev = p
 
 
-WEATHER = re.compile(r"^(?P<sky>.*?)\s*Temp:\s*(?P<temp>[-\d]+)°?\s*F", re.I)
+WEATHER = re.compile(
+    r"^(?P<sky>.*?)\s*Temp:\s*(?P<temp>-?\d+)°?\s*F"
+    r"(?:,\s*Humidity:\s*(?P<hum>\d+)%)?"
+    r"(?:,\s*Wind:\s*(?P<dir>[NSEW]{0,3})\s*(?P<speed>\d*)\s*mph)?", re.I)
+
+# The sky, as nflverse writes it, is free text — nine wordings in three weeks,
+# one of them "Mostly Cluody". Read into a short, spelled set of labels and the
+# icon each one draws. Order matters: "Partly Cloudy" must not be read as
+# "Cloudy", nor "Light Rain" as "Rain".
+SKY = [
+    (r"snow|flurr", "Snow", "snow"),
+    (r"drizzle", "Drizzle", "rain"),
+    (r"light\s*rain", "Light rain", "rain"),
+    (r"rain|shower|storm", "Rain", "rain"),
+    (r"fog|haze|mist", "Fog", "fog"),
+    (r"partly|sun\s*&\s*cloud|mostly\s*sun", "Partly cloudy", "partly"),
+    (r"mostly\s*cl", "Mostly cloudy", "cloud"),
+    (r"overcast", "Overcast", "cloud"),
+    (r"cloud|cluod", "Cloudy", "cloud"),
+    (r"clear", "Clear", "sun"),
+    (r"fair", "Fair", "sun"),
+    (r"sun", "Sunny", "sun"),
+]
+
+
+def conditions(g: dict, first: dict) -> dict:
+    """The ground and the weather over it, as one reading at kickoff.
+
+    Two sources, and each is trusted for one thing. The schedule knows whether
+    there was a roof over the field: it leaves temperature and wind blank for
+    every game played under one. The play-by-play has the fuller reading —
+    sky, humidity and which way the wind came from — but writes it for roofed
+    games too, and there it is the weather *outside*: SoFi Stadium is a dome
+    and its line reads "Sunny, wind SW 6 mph". So the schedule decides whether
+    there was weather on the field, and the weather line says what it was.
+
+    One game contradicts its own schedule. The Melbourne Cricket Ground has no
+    roof, and week 1's 49ers-Rams game there is filed as a dome — with a
+    temperature and a wind, which no genuinely roofed game has. The weather is
+    believed and the roof is not.
+
+    Everything is taken from the one weather line rather than mixing it with
+    the schedule's temperature and wind, so the reading is of one moment. The
+    two disagree on one game in three weeks (Baltimore, week 2: 79°F and 10 mph
+    against 77°F and 7 mph); where the line is missing, the schedule's figures
+    stand in."""
+    roof = s(g, "roof")
+    s_temp, s_wind = i(g, "temp"), i(g, "wind")
+    indoor = roof in ("dome", "closed")
+    if indoor and (s_temp is not None or s_wind is not None):
+        roof, indoor = "outdoors", False
+
+    out: dict = {"stadium": s(g, "stadium"), "roof": roof, "surface": s(g, "surface"), "indoor": indoor}
+    if indoor:
+        return out
+
+    temp, wind, hum, frm, sky, icon = s_temp, s_wind, None, None, None, None
+    if (w := s(first, "weather")) and (m := WEATHER.match(w)):
+        temp = int(m.group("temp"))
+        if m.group("speed"):
+            wind = int(m.group("speed"))
+        if m.group("hum"):
+            hum = int(m.group("hum"))
+        frm = (m.group("dir") or "").upper() or None
+        raw = m.group("sky").strip()
+        if raw:
+            for pat, label, ic in SKY:
+                if re.search(pat, raw, re.I):
+                    sky, icon = label, ic
+                    break
+            else:
+                sky = raw[0].upper() + raw[1:].lower()
+    out.update({"sky": sky, "icon": icon, "temp": temp, "wind": wind,
+                "wind_from": frm if wind else None, "humidity": hum})
+    return out
 
 
 def build_game(g: dict, rows: list[dict], chart: dict) -> dict:
@@ -965,10 +1042,6 @@ def build_game(g: dict, rows: list[dict], chart: dict) -> dict:
         sys.exit(f"{s(g, 'game_id')}: plays end {seen_away}-{seen_home}, "
                  f"schedule says {final_away}-{final_home}")
 
-    sky = None
-    if (w := s(r0(rows), "weather")) and (m := WEATHER.match(w)):
-        sky = m.group("sky").strip() or None
-
     return {
         "id": s(g, "game_id"),
         "season": i(g, "season"),
@@ -983,11 +1056,9 @@ def build_game(g: dict, rows: list[dict], chart: dict) -> dict:
         "ot": flag(g, "overtime"),
         "neutral": s(g, "location") == "Neutral",
         "div": flag(g, "div_game"),
-        "venue": {
-            "stadium": s(g, "stadium"), "roof": s(g, "roof"),
-            "surface": s(g, "surface"), "temp": i(g, "temp"), "wind": i(g, "wind"),
-            "sky": sky, "weather": s(r0(rows), "weather"),
-        },
+        "venue": conditions(g, r0(rows)),
+        # The referee's season is added once every game has been built — see
+        # `referee_seasons`.
         "officials": {"referee": s(g, "referee")},
         "coaches": {"home": s(g, "home_coach"), "away": s(g, "away_coach")},
         "starters": {"home_qb": s(g, "home_qb_name"), "away_qb": s(g, "away_qb_name")},
@@ -1458,6 +1529,40 @@ def emit_compare(season: int, teams: dict, games: list[dict], index: dict) -> in
     return written
 
 
+def referee_seasons(details: list[dict]) -> None:
+    """Each game's referee and his crew's season to date, as of that game.
+
+    As of that game, not as of today, for two reasons. A game's page is
+    permanent, and this way it does not change every week as later games land.
+    And it never carries what was not yet known: the page of his second game
+    says what his first two looked like and nothing about his third.
+
+    Penalties are counted as the box score counts them, both sides together,
+    so the figure agrees with the numbers on the same page. The league's
+    average is over every game on or before the same date — not "before this
+    game", because games played at the same hour have no order between them.
+
+    Always published with the number of games it is drawn from. Three games is
+    not a pattern, and a line that let it look like one would be saying
+    something the data does not."""
+    ordered = sorted(details, key=lambda d: (d["date"], d["kickoff"] or "", d["id"]))
+    pens = {d["id"]: sum(b.get("penalties", 0) for b in d["box"].values()) for d in ordered}
+    mine: dict[str, list[int]] = collections.defaultdict(list)
+    for d in ordered:
+        ref = d["officials"].get("referee")
+        if not ref:
+            continue
+        mine[ref].append(pens[d["id"]])
+        upto = [pens[x["id"]] for x in ordered if x["date"] <= d["date"]]
+        d["officials"]["season"] = {
+            "n": len(mine[ref]),
+            "pens": sum(mine[ref]),
+            "this": pens[d["id"]],
+            "league": round(sum(upto) / len(upto), 1),
+            "league_n": len(upto),
+        }
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -1487,6 +1592,7 @@ def main() -> int:
 
     written = 0
     games = []
+    details: list[dict] = []
     for g in schedule_rows:
         gid = s(g, "game_id")
         row = game_row(g)
@@ -1499,7 +1605,7 @@ def main() -> int:
             print(f"  {gid}: final score but no play-by-play yet")
         elif rows:
             detail = build_game(g, rows, chart)
-            written += write_json(OUT / "games" / f"{gid}.json", detail)
+            details.append(detail)
             row["detail"] = True
             row["plays"] = sum(1 for p in detail["plays"] if p["kind"] == "play")
             row["drives"] = len(detail["drives"])
@@ -1508,6 +1614,12 @@ def main() -> int:
         else:
             row["detail"] = False
         games.append(row)
+
+    # Written after the loop rather than in it, because a game's referee line
+    # needs every game up to its date built first.
+    referee_seasons(details)
+    for d in details:
+        written += write_json(OUT / "games" / f"{d['id']}.json", d)
 
     played = [g for g in games if g["played"]]
     weeks = sorted({g["week"] for g in games})

@@ -18,6 +18,8 @@ import { getGame, getGames, getRecords, getTeams } from '@lib/data';
 import { lineScore } from '@lib/game';
 import { longDate, record, sentence } from '@lib/format';
 import { gameUrl, u } from '@lib/url';
+import SkyIcon from '@components/SkyIcon.astro';
+import { roof as roofText, surface as surfaceText, wind as windText, ordinal, counted } from '@lib/conditions';
 
 export async function getStaticPaths() {
   const { getGames } = await import('@lib/data');
@@ -35,6 +37,7 @@ const home = teams[row.home]!;
 const records = getRecords();
 
 const title = `${away.nick} at ${home.nick}`;
+const ref = game?.officials.season ?? null;
 const subtitle = `Week ${row.week} · ${longDate(row.date)}`;
 
 // ── Played ────────────────────────────────────────────────────────────────
@@ -118,13 +121,57 @@ const formOf = (abbr: string) =>
         </table>
       )}
 
-      <p class="venue small">
-        {row.stadium ?? 'Venue to be confirmed'}
-        {row.roof && <> · {sentence(row.roof)}</>}
-        {game?.venue.surface && <> · {sentence(game.venue.surface)}</>}
-        {game?.venue.sky && <> · {game.venue.sky}, {game.venue.temp}°F, wind {game.venue.wind} mph</>}
-        {game?.officials.referee && <> · referee {game.officials.referee}</>}
-      </p>
+      {/* Where, in what, and who was in charge of it. The stadium line on its
+          own; then the conditions and the referee as labelled rows, because
+          as the tail of one long line of small type they were not being seen
+          at all. A fixture has a stadium and neither of the other two. */}
+      <div class="about">
+        <p class="venue small">
+          {row.stadium ?? 'Venue to be confirmed'}
+          {game && <> · {roofText(game.venue)}</>}
+          {game && surfaceText(game.venue) && <> · {surfaceText(game.venue)}</>}
+        </p>
+        {game && (
+          <dl class="facts-bar small">
+            <div>
+              <dt>Conditions</dt>
+              <dd>
+                {game.venue.indoor ? (
+                  <><SkyIcon kind="indoor" size={16} /> Indoors — no weather on the field</>
+                ) : (
+                  <>
+                    <SkyIcon kind={game.venue.icon} size={16} />
+                    {[game.venue.sky,
+                      game.venue.temp != null ? `${game.venue.temp}°F` : null,
+                      windText(game.venue),
+                      game.venue.humidity != null ? `humidity ${game.venue.humidity}%` : null,
+                    ].filter(Boolean).join(' · ') || 'Not recorded'}
+                  </>
+                )}
+              </dd>
+            </div>
+            {game.officials.referee && (
+              <div>
+                <dt>Referee</dt>
+                <dd class="ref-dd">
+                  <span class="ref">{game.officials.referee}</span>
+                  {ref && (
+                    <span class="muted">
+                      {' · '}his {ordinal(ref.n)} game this season{' · '}
+                      {/* The counts are this game's box score and the ones
+                          before it, so they go with the box score when
+                          spoilers are off. The number of games does not. */}
+                      {ref.n === 1
+                        ? <><span class="spoil">{ref.pens}</span> penalties (league <span class="spoil">{ref.league}</span> a game)</>
+                        : <><span class="spoil">{(ref.pens / ref.n).toFixed(1)}</span> penalties a game across the {counted(ref.n)} (league <span class="spoil">{ref.league}</span>)</>}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+      </div>
     </header>
 
     {game ? (
@@ -299,7 +346,31 @@ const formOf = (abbr: string) =>
   .linescore td { color: var(--ks-text-muted); }
   .linescore .final { color: var(--ks-ink); font-weight: 600; border-left: 1px solid var(--ks-rule); }
 
-  .venue { margin-top: 28px; text-align: center; color: var(--ks-text-muted); }
+  .about { margin-top: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .venue { margin: 0; text-align: center; color: var(--ks-text-muted); }
+  /* Two labelled rows, labels in their own column so the two values start in
+     the same place, and the whole block centred under the score. */
+  .facts-bar {
+    display: grid; grid-template-columns: auto auto; column-gap: 14px; row-gap: 5px;
+    margin: 0; color: var(--ks-text-muted);
+  }
+  .facts-bar > div { display: contents; }
+  .facts-bar dt {
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-text-mute-deep); text-align: right;
+    align-self: center;
+  }
+  .facts-bar dd { margin: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .facts-bar .ref { color: var(--ks-ink); }
+  /* Running text, not a row of items: laid out as flex, the gap was added on
+     top of the spaces around the dot. */
+  .facts-bar .ref-dd { display: block; }
+  .facts-bar :global(.sky) { color: var(--ks-text); }
+  @media (max-width: 560px) {
+    .facts-bar { grid-template-columns: 1fr; text-align: center; }
+    .facts-bar dt { text-align: center; margin-top: 6px; }
+    .facts-bar dd { justify-content: center; }
+  }
 
   .stats {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));

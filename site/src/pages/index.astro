@@ -139,6 +139,9 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
                   : <>{dayOf(g.weekday)}{g.kickoff} ET</>}
                 {g.div && <span class="div">Div</span>}
               </span>
+              {/* Only a played game has one: crews are named once the game is
+                  done, so a fixture's card has nothing to put here. */}
+              {g.played && g.referee && <span class="ref">Referee {g.referee}</span>}
             </a>
           ))}
         </div>
@@ -155,6 +158,13 @@ const dayOf = (weekday: string) => `${weekday.slice(0, 3)} · `;
 </Base>
 
 <style>
+  .ref {
+    margin-top: -2px;
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.06em;
+    color: var(--ks-text-mute-deep);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
   /* Spoilers off. The winner's name is set heavier than the loser's, which on
      its own would still say who won every game on the page. */
   :global(html[data-spoilers='off']) .club.won { font-weight: inherit; color: inherit; }

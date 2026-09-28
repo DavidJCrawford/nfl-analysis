@@ -488,6 +488,58 @@ def check_fumbles(r: Report, game: dict) -> None:
                      f"{gid} play {p['id']}: recovering side against lost")
 
 
+def check_conditions(r: Report, game: dict, csv_row: dict | None) -> None:
+    """Weather on the field only where there was no roof over it.
+
+    The replay's panel and the game page draw straight from this, and the
+    easiest mistake to make is the one nflverse's own weather line invites:
+    printing the weather outside a dome as if it had been inside it."""
+    gid, v = game["id"], game["venue"]
+    WEATHER = ("sky", "temp", "wind", "wind_from", "humidity")
+    if v.get("indoor"):
+        r.ok(all(v.get(k) is None for k in WEATHER), f"{gid}: indoors, but with weather")
+        r.ok(v.get("roof") in ("dome", "closed"), f"{gid}: indoors under roof {v.get('roof')!r}")
+    else:
+        r.ok(v.get("roof") in ("outdoors", "open"), f"{gid}: weather under roof {v.get('roof')!r}")
+        if v.get("temp") is not None:
+            r.ok(-20 <= v["temp"] <= 115, f"{gid}: temperature {v['temp']}°F")
+        if v.get("humidity") is not None:
+            r.ok(0 <= v["humidity"] <= 100, f"{gid}: humidity {v['humidity']}%")
+        if v.get("wind_from") is not None:
+            r.ok(v["wind_from"] in {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                                     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"},
+                 f"{gid}: wind from {v['wind_from']!r}")
+    # The one correction made to nflverse: a roofed game the schedule itself
+    # gives weather to was played outside. Anything else must match it.
+    if csv_row is not None:
+        sched_roof = csv_row.get("roof")
+        corrected = sched_roof in ("dome", "closed") and csv_row.get("temp") not in ("", "NA")
+        if not corrected:
+            r.eq(v.get("roof"), sched_roof, f"{gid}: roof against the schedule")
+
+
+def check_referees(r: Report, details: list[dict]) -> None:
+    """Each referee's season line is recomputed here from the box scores and
+    must agree — and must never count a game after the one it is printed on."""
+    ordered = sorted(details, key=lambda d: (d["date"], d["kickoff"] or "", d["id"]))
+    pens = {d["id"]: sum(b.get("penalties", 0) for b in d["box"].values()) for d in ordered}
+    seen: dict[str, list[int]] = {}
+    for d in ordered:
+        ref, ss = d["officials"].get("referee"), d["officials"].get("season")
+        if not ref:
+            r.ok(ss is None, f"{d['id']}: a referee's season with no referee")
+            continue
+        seen.setdefault(ref, []).append(pens[d["id"]])
+        if not r.ok(ss is not None, f"{d['id']}: referee {ref} with no season line"):
+            continue
+        r.eq(ss["n"], len(seen[ref]), f"{d['id']}: {ref}'s games so far")
+        r.eq(ss["pens"], sum(seen[ref]), f"{d['id']}: {ref}'s penalties so far")
+        r.eq(ss["this"], pens[d["id"]], f"{d['id']}: penalties in this game against its box score")
+        upto = [pens[x["id"]] for x in ordered if x["date"] <= d["date"]]
+        r.eq(ss["league_n"], len(upto), f"{d['id']}: league games to date")
+        r.eq(ss["league"], round(sum(upto) / len(upto), 1), f"{d['id']}: league average to date")
+
+
 # ── People ───────────────────────────────────────────────────────────────────
 
 # Stats that add up over a set of games. The rest do not, and summing them
@@ -650,10 +702,14 @@ def main() -> int:
                      {g["id"]: g for g in schedule["games"]})
 
     played = 0
+    details = []
+    by_csv = {row["game_id"]: row for row in csv_games}
     for g in schedule["games"]:
         if not g.get("detail"):
             continue
         game = load(DATA / "games" / f"{g['id']}.json")
+        details.append(game)
+        check_conditions(r, game, by_csv.get(g["id"]))
         played += 1
         check_score(r, game)
         check_drives(r, game)
@@ -664,6 +720,8 @@ def main() -> int:
         check_box(r, game)
         check_fumbles(r, game)
         check_player_box(r, game, by_game)
+
+    check_referees(r, details)
 
     if r.fails:
         print(f"FAILED — {len(r.fails)} of {r.checks} checks, over {played} games\n")

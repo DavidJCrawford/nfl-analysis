@@ -37,9 +37,12 @@ import type { Game, Teams } from '@lib/types';
 import { isPlay, gameLength, countLeadChanges, versusSpread } from '@lib/game';
 import { signed } from '@lib/format';
 import { u } from '@lib/url';
+import SkyIcon from '@components/SkyIcon.astro';
+import { surface as surfaceText, roof as roofText } from '@lib/conditions';
 
 interface Props { game: Game; teams: Teams; }
 const { game, teams } = Astro.props;
+const v = game.venue;
 
 const home = teams[game.home]!;
 const away = teams[game.away]!;
@@ -122,6 +125,40 @@ const payload = {
   <dialog class="stage instrument" data-replay aria-label={`Replay of ${away.nick} at ${home.nick}`}>
     <div class="stage-inner">
       <button class="close" type="button" data-replay-close aria-label="Close the replay">Close</button>
+
+      {/* The conditions, in the corner a broadcast keeps for them, and in the
+          same inset as Close so the two frame the field between them. One
+          reading at kickoff: it does not change as the game goes on, because
+          nothing recorded does, and it does not pretend to. Under a roof it
+          says so and nothing else — the weather line nflverse writes for a
+          dome is the weather in the car park. */}
+      <aside class="wx" aria-label="Conditions at kickoff">
+        {v.indoor ? (
+          <>
+            <p class="wx-top">
+              <SkyIcon kind="indoor" size={14} /><span class="wx-big">Indoors</span>
+              {surfaceText(v) && <span class="wx-turf">· {surfaceText(v)}</span>}
+            </p>
+            <p class="wx-sub">{roofText(v)}</p>
+          </>
+        ) : (
+          <>
+            <p class="wx-top">
+              <SkyIcon kind={v.icon} size={14} />
+              {v.temp != null && <span class="wx-big">{v.temp}°</span>}
+              {v.sky && <span class="wx-sky">{v.sky}</span>}
+              {surfaceText(v) && <span class="wx-turf">· {surfaceText(v)}</span>}
+            </p>
+            {(v.wind != null || v.humidity != null) && (
+              <p class="wx-sub">
+                {v.wind != null && <span class="wx-wind"><SkyIcon kind="wind" size={12} />
+                  {v.wind === 0 ? 'Calm' : <>{v.wind} mph{v.wind_from && <> from {v.wind_from}</>}</>}</span>}
+                {v.humidity != null && <span>· {v.humidity}% humidity</span>}
+              </p>
+            )}
+          </>
+        )}
+      </aside>
 
       <div class="field-wrap">
         <canvas data-field></canvas>
@@ -444,6 +481,31 @@ const payload = {
     font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.12em; text-transform: uppercase;
   }
   .close:hover { color: var(--ks-instrument-text); border-color: var(--ks-instrument-text); }
+
+  /* Mirrors Close: the same inset, the same ground and rule, the opposite
+     corner. Two short lines, so it sits in the band above the field that the
+     result marker and Close already share. */
+  .wx {
+    position: absolute; top: var(--pad); left: var(--pad); z-index: 3;
+    display: grid; gap: 1px;
+    padding: 3px 10px 4px 8px;
+    background: var(--ks-instrument-deep);
+    border: 1px solid var(--ks-instrument-rule); border-radius: 8px;
+    color: var(--ks-instrument-muted);
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.08em; text-transform: uppercase;
+    line-height: 1.15; pointer-events: none;
+  }
+  .wx p { margin: 0; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .wx :global(.sky) { color: var(--ks-instrument-text); }
+  .wx-big { font-size: 1.25em; letter-spacing: 0.02em; color: var(--ks-instrument-text); font-variant-numeric: tabular-nums; }
+  .wx-sky { color: var(--ks-instrument-text); }
+  .wx-wind { display: inline-flex; align-items: center; gap: 3px; }
+  .wx-sub { gap: 6px; }
+  /* A short screen keeps the temperature and the wind and loses the rest. */
+  @media (max-height: 560px), (max-width: 520px) {
+    .wx { padding: 3px 8px; }
+    .wx-sky, .wx-turf { display: none; }
+  }
 
   /* ── Field ─────────────────────────────────────────────────────────────── */
   .field-wrap { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }

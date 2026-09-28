@@ -140,7 +140,7 @@ Measured against the live sources on 2026-09-16, and again on 2026-09-24.
 - **There is no public player tracking for 2026** — SPEC §3.1. This is the hard
   ceiling on the replay and it shaped the replay from the start.
 
-## 3. Seven things about the data that cost time to find
+## 3. Eight things about the data that cost time to find
 
 **`game_seconds_remaining` is not monotonic.** It counts 3600 down to 0 through
 regulation and then **restarts at 600 for overtime**. Anything on a timeline
@@ -202,6 +202,18 @@ kickoff that followed was `fixed_drive` 3 but `drive` 2, and carried drive 2's
 start: the TB 40, twenty yards from where drive 3 actually began. The summary
 is now read only off a row whose `drive` matches the one its group's own snaps
 carry; kickoffs and extra points get no vote.
+
+**The weather line is written under a roof too.** The play-by-play carries a
+fuller reading than the schedule — sky, humidity and which way the wind came
+from — but writes it for domes and closed roofs as well, where it is the
+weather outside: SoFi reads "Sunny, wind SW 6 mph". The schedule is right about
+roofs, leaving temperature and wind blank under every one. So the schedule
+decides whether there was weather on the field and the line says what it was.
+The one exception proves the rule: week 1's game at the Melbourne Cricket
+Ground, which has no roof, is filed as a dome — with a temperature and a wind.
+The weather is believed and the roof is not; `verify.py` holds every other
+game's roof to the schedule. Before this, the game page printed "Sunny, °F,
+wind mph" for fourteen of the fifteen roofed games.
 
 ## 4. Lessons from F1 that applied here, and how
 

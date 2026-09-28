@@ -137,6 +137,16 @@ a passing chart, and the site should not imply otherwise.
 /credits/               Sources and terms
 ```
 
+A game page names its conditions and its referee on their own labelled rows
+under the stadium. The referee carries his crew's season **as of that game** —
+his games so far, their penalties a game, and the league's to the same date —
+so the page never changes as later weeks land and never says what was not yet
+known; the number of games is always given, because three is not a pattern.
+The replay shows the same conditions in its top-left corner, opposite Close:
+one reading at kickoff, "Indoors" under a roof, and the wind's direction in
+words, since nothing records which way a stadium faces and an arrow drawn by
+compass bearing would point a direction that means nothing on the field.
+
 Any page above takes `?spoilers=off`, which blacks out every result and
 standing on it, so the only way to learn how a game went is to watch its
 replay. The switch is in the masthead beside Teams and defaults to on. It is a

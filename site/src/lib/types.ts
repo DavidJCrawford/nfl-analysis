@@ -38,6 +38,8 @@ export interface ScheduleGame {
   roof: string | null;
   /** Home-relative and positive when the home team is favoured. Only published
    *  a few weeks ahead of kickoff, so null for most of the season. */
+  /** Published only once the game has been played. */
+  referee?: string | null;
   spread: number | null;
   total_line: number | null;
   away_rest: number | null;
@@ -53,6 +55,22 @@ export interface ScheduleGame {
   plays?: number;
   drives?: number;
   notes?: number;
+}
+
+/** The ground and the weather over it, one reading at kickoff. Under a roof
+ *  there is no weather on the field, and none of the weather fields is set. */
+export interface Venue {
+  stadium: string | null;
+  roof: string | null;
+  surface: string | null;
+  indoor: boolean;
+  sky?: string | null;
+  icon?: 'sun' | 'partly' | 'cloud' | 'rain' | 'snow' | 'fog' | null;
+  temp?: number | null;
+  wind?: number | null;
+  /** Compass point the wind came *from*, as weather reports give it. */
+  wind_from?: string | null;
+  humidity?: number | null;
 }
 
 export interface Schedule {
@@ -217,11 +235,12 @@ export interface Game {
   ot: boolean;
   neutral: boolean;
   div: boolean;
-  venue: {
-    stadium: string | null; roof: string | null; surface: string | null;
-    temp: number | null; wind: number | null; sky: string | null; weather: string | null;
+  venue: Venue;
+  officials: {
+    referee: string | null;
+    /** His crew's season as of this game, never later — see emit.py. */
+    season?: { n: number; pens: number; this: number; league: number; league_n: number };
   };
-  officials: { referee: string | null };
   coaches: { home: string | null; away: string | null };
   starters: { home_qb: string | null; away_qb: string | null };
   line: { spread: number | null; total: number | null; home_ml: number | null; away_ml: number | null };
