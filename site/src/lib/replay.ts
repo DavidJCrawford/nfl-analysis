@@ -53,6 +53,9 @@ interface Frame {
   respot?: { from: number; why: 'penalty' | 'loose' | 'change' | 'restart' | null };
   /** Who did it — the players whose movement the replay can honestly draw. */
   act?: { kick?: Actor; ret?: Actor; pass?: Actor; rec?: Actor; rush?: Actor; int?: Actor };
+  /** A loose ball: who lost it, who came up with it. For the card only — see
+   *  emit.py for why it is not an actor. */
+  fum?: { by: Actor; team: string | null; lost: boolean; rec?: Actor; rec_team?: string; forced?: string; muff?: boolean };
   /** Both legs of a pass: through the air, then after the catch. */
   air?: number;
   yac?: number;
@@ -2003,7 +2006,8 @@ export function mountReplay(): void {
    *  INTERCEPTED over a ball that has not moved yet gives the play away.
    *
    *  One card each, so the order is the order of what matters: a score, then a
-   *  turnover, then a sack, a spike, a pass that fell, and a first down. Ninety of the season's
+   *  turnover — an interception or a fumble lost — then a sack, a fumble the
+   *  offence kept, a spike, a pass that fell, and a first down. Ninety of the season's
    *  ninety-three touchdowns are tagged as first downs too, and FIRST DOWN is a
    *  poor thing to say about a touchdown; two of them were also interceptions,
    *  and the card says so under the word rather than coming up twice.
@@ -2038,13 +2042,18 @@ export function mountReplay(): void {
       // A defensive score names the man who intercepted it; nobody is named on
       // a fumble returned, so it says what happened instead of guessing who.
       const who = by === f.def
-        ? (a.int?.n ?? (tags.includes('lost') ? 'Fumble returned' : null))
+        ? (a.int?.n ?? (f.fum?.lost ? (f.fum.rec?.n ?? 'Fumble returned') : null))
         : (a.rec?.n ?? a.rush?.n ?? null);
       return {
         title: 'Touchdown', tone: 'gain', ms: SCORE_MS, team: by,
         kind: who ?? `${by} score`,
         meta: [by, tags.includes('int') ? 'intercepted' : null,
                by === f.def && tags.includes('sack') ? 'strip sack' : null,
+               // Seattle at Washington: Saubert fumbled at the one and fell on
+               // it in the end zone. The score is the headline; the fumble is
+               // what happened on the way, so it is said under the word.
+               by === f.pos && f.fum ? 'fumbled, recovered' : null,
+               by === f.def && f.fum?.lost && !tags.includes('sack') ? 'fumble return' : null,
                f.gain == null ? null : `${f.gain > 0 ? '+' : ''}${f.gain} yards`]
           .filter(Boolean).join(' · '),
       };
@@ -2060,6 +2069,32 @@ export function mountReplay(): void {
       };
     }
 
+    // A loose ball the other side came up with. A turnover exactly as an
+    // interception is, so it ranks with one and ahead of the sack: a strip
+    // sack that is lost is a fumble first, and says "strip sack" under it.
+    //
+    // Built as the sack card is. The mark is the side that did it — here the
+    // side that has the ball now — and the name under the word is the man it
+    // happened to. "Fumble lost" rather than "Fumble", because on a loose ball
+    // the one question a reader has is who has it, and the title should
+    // answer it before the small print does.
+    const fum = f.fum;
+    const kicked = f.type === 'punt' || f.type === 'kickoff';
+    const muffWord = f.type === 'kickoff' ? 'Muffed kick' : 'Muffed punt';
+    if (fum?.lost) {
+      const gained = fum.rec_team ?? (fum.team === f.pos ? f.def : f.pos);
+      return {
+        title: fum.muff ? muffWord : 'Fumble lost', tone: 'turnover', ms: TURNOVER_MS, team: gained,
+        kind: fum.by.n,
+        // A muff's title cannot say lost or kept the way "Fumble lost" does, so
+        // its first words do: "CHI ball". Without them a muff Carolina lost
+        // and one New York kept read the same.
+        meta: [fum.muff ? `${gained} ball` : gained, fum.rec ? `recovered by ${fum.rec.n}` : 'recovered',
+               tags.includes('sack') ? 'strip sack' : fum.forced ? `forced by ${fum.forced}` : null]
+          .filter(Boolean).join(' · '),
+      };
+    }
+
     // The sack names only the quarterback: the league records who was sacked
     // and not who did it. So the mark is the defence's, because they made the
     // play, and the man under the word is the one it happened to.
@@ -2069,7 +2104,25 @@ export function mountReplay(): void {
         title: 'Sacked', tone: 'turnover', ms: SACK_MS, team: f.def,
         kind: a.pass?.n ?? 'Quarterback',
         meta: [f.def, lost ? `${lost} yard${lost === 1 ? '' : 's'} lost` : null,
-               tags.includes('lost') ? 'fumble lost' : null].filter(Boolean).join(' · '),
+               fum && !fum.lost ? 'fumble recovered' : null].filter(Boolean).join(' · '),
+      };
+    }
+
+    // A loose ball the same side got back. Still something gone wrong — the
+    // colour this site gives a flag, which does not change hands either — and
+    // still worth stopping on, which is the whole of what was missing: these
+    // were told only in the read-out, in words, and a fumble lost was told
+    // there too. It outranks a first down made on the same play.
+    if (fum) {
+      const kept = fum.rec_team ?? fum.team ?? f.pos;
+      const own = fum.rec && fum.rec.n === fum.by.n;
+      return {
+        title: fum.muff ? muffWord : 'Fumble', tone: 'turnover', ms: SACK_MS, team: kept,
+        kind: fum.by.n,
+        meta: [fum.muff ? `${kept} keep it` : kept,
+               own ? 'recovered his own' : fum.rec ? `recovered by ${fum.rec.n}` : 'kept',
+               !kicked && fum.forced ? `forced by ${fum.forced}` : null]
+          .filter(Boolean).join(' · '),
       };
     }
 

@@ -136,6 +136,9 @@ export interface Play extends PlayBase {
   /** Who did it — the players whose movement the replay can honestly draw.
    *  See build_actors in pipeline/emit.py. */
   act?: Partial<Record<'kick' | 'ret' | 'pass' | 'rec' | 'rush' | 'int', Actor>>;
+  /** A fumble or a muff: who lost it, who recovered it, who forced it. Named
+   *  for the replay's card, not drawn — see emit.py. */
+  fum?: { by: Actor; team: string | null; lost: boolean; rec?: Actor; rec_team?: string; forced?: string; muff?: boolean };
   /** How far a pass travelled in the air, and how far it was carried after the
    *  catch. Between them they say where it was caught, not just where it
    *  finished. `yac` is present on completions and on nothing else. */

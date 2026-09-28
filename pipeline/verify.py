@@ -462,6 +462,32 @@ def check_box(r: Report, game: dict) -> None:
          f"{gid}: player lines claim {player_tds} scrimmage touchdowns, plays show {scrimmage_tds}")
 
 
+def check_fumbles(r: Report, game: dict) -> None:
+    """Every fumble names who lost it, and agrees with itself about who has it.
+
+    The replay's fumble card is built from this record alone. A fumble without
+    one gets no card at all — which is the fault this record was added to
+    fix, when the season's fumbles were told only in the read-out's words."""
+    gid = game["id"]
+    sides = {game["home"], game["away"]}
+    for p in game["plays"]:
+        tags = p.get("tags", [])
+        fum = p.get("fum")
+        if "fumble" not in tags:
+            r.ok(fum is None, f"{gid} play {p['id']}: a fumble record on a play with no fumble")
+            continue
+        if not r.ok(fum is not None and bool(fum.get("by", {}).get("n")),
+                    f"{gid} play {p['id']}: a fumble with nobody named as having lost it"):
+            continue
+        r.eq(fum["lost"], "lost" in tags, f"{gid} play {p['id']}: fumble lost against the tag")
+        if fum.get("rec_team"):
+            r.ok(fum["rec_team"] in sides, f"{gid} play {p['id']}: recovered by {fum['rec_team']}, not in the game")
+            # Lost means the other side has it; kept means the same side does.
+            if fum.get("team"):
+                r.eq(fum["rec_team"] != fum["team"], fum["lost"],
+                     f"{gid} play {p['id']}: recovering side against lost")
+
+
 # ── People ───────────────────────────────────────────────────────────────────
 
 # Stats that add up over a set of games. The rest do not, and summing them
@@ -636,6 +662,7 @@ def main() -> int:
         check_units(r, game)
         check_snap(r, game)
         check_box(r, game)
+        check_fumbles(r, game)
         check_player_box(r, game, by_game)
 
     if r.fails:

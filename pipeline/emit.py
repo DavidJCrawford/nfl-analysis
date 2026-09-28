@@ -602,6 +602,34 @@ def build_play(r: dict, home: str, away: str, notes: list[str],
     if (actors := build_actors(r, play["desc"])):
         play["act"] = actors
 
+    # The loose ball: who lost it, who came up with it, who knocked it out.
+    # Kept apart from `act` on purpose. Those are the people the replay can
+    # draw, placed by a recorded number; nobody here is — the league records
+    # where a fumble was recovered but not where the man who forced it was
+    # standing — so this is for the card to name them and nothing else.
+    #
+    # The fumbler is named on all 115 of the season's fumbles, the recoverer on
+    # 105 (the rest went out of bounds) and the man who forced it on 84.
+    #
+    # A muff is flagged too, because nflverse counts the nine that were
+    # recovered by anybody as fumbles, and a returner who never had the ball
+    # did not fumble it. The card says "Muffed" for those. Ten more muffs carry
+    # no fumble flag: every one a kickoff the returner bobbled and picked back
+    # up himself, and none of them a turnover.
+    if flag(r, "fumble") and (who := s(r, "fumbled_1_player_name")):
+        fum: dict = {"by": {"n": who, "j": jersey_of(play["desc"], who)},
+                     "team": s(r, "fumbled_1_team"),
+                     "lost": flag(r, "fumble_lost")}
+        if (rec := s(r, "fumble_recovery_1_player_name")):
+            fum["rec"] = {"n": rec, "j": jersey_of(play["desc"], rec)}
+        if (rt := s(r, "fumble_recovery_1_team")):
+            fum["rec_team"] = rt
+        if (ff := s(r, "forced_fumble_player_1_player_name")):
+            fum["forced"] = ff
+        if "MUFFS" in play["desc"].upper():
+            fum["muff"] = True
+        play["fum"] = fum
+
     # The flag: who it was on, what for, and how far it cost. All four fields
     # are complete on all 237 penalties of the season, and the infraction is
     # written into the description verbatim — which verify.py checks, because a
