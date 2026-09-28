@@ -658,7 +658,26 @@ def build_drives(rows: list[dict], plays: list[dict], home: str) -> list[dict]:
         # other team entirely. nflverse leaves the summary columns blank on the
         # kickoff row precisely in that case, so the first row that carries them
         # is the right one to read.
-        lead = next((r for r in rs if s(r, "posteam") and s(r, "drive_start_yard_line")), None)
+        #
+        # One more wrinkle. Plays are grouped by `fixed_drive`, nflverse's
+        # corrected numbering, but the summary columns are repeated by the
+        # *uncorrected* `drive`. They usually agree. At a boundary they need
+        # not: after Minnesota returned a punt for a touchdown at Tampa Bay in
+        # week 3, the kickoff that followed is `fixed_drive` 3 — rightly, it
+        # opens Tampa's next series — but `drive` 2, and so it carries drive
+        # 2's summary: a start at the TB 40, twenty yards from where drive 3's
+        # first snap actually was. So the summary is read only off a row whose
+        # `drive` is the one this group's own snaps carry. Kickoffs and extra
+        # points are the boundary rows and do not get a vote.
+        own = collections.Counter(
+            s(r, "drive") for r in rs
+            if s(r, "posteam") and s(r, "drive")
+            and s(r, "play_type") not in (None, "kickoff", "extra_point")
+        ).most_common(1)
+        own_drive = own[0][0] if own else None
+        lead = next((r for r in rs if s(r, "posteam") and s(r, "drive_start_yard_line")
+                     and (own_drive is None or s(r, "drive") == own_drive)), None)
+        lead = lead or next((r for r in rs if s(r, "posteam") and s(r, "drive_start_yard_line")), None)
         lead = lead or next((r for r in rs if s(r, "posteam")), None)
         if lead is None:
             continue
@@ -1146,6 +1165,16 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
 
     by_id = {r["gsis_id"]: r for r in roster if r.get("gsis_id")}
     played = {r["player_id"] for r in weeks if r.get("player_id")}
+    # INA is not a roster status. It is the game-day inactive list: the week 3
+    # file marks eleven players INA, every one of them from Atlanta or Green
+    # Bay — the two clubs that had already played that week, on the Thursday —
+    # and every one with the description code A01, the same as an active
+    # player's. They are on the 53-man roster and were not dressed for one
+    # game. Treated as anything but active, five of them who had not yet
+    # played lost their pages outright, Green Bay's starting guard among them.
+    for r in roster:
+        if s(r, "status") == "INA":
+            r["status"] = "ACT"
     active = {p for p, r in by_id.items() if s(r, "status") == "ACT"}
     wanted = (active | played) & set(by_id)
 

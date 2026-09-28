@@ -140,7 +140,7 @@ Measured against the live sources on 2026-09-16, and again on 2026-09-24.
 - **There is no public player tracking for 2026** — SPEC §3.1. This is the hard
   ceiling on the replay and it shaped the replay from the start.
 
-## 3. Five things about the data that cost time to find
+## 3. Seven things about the data that cost time to find
 
 **`game_seconds_remaining` is not monotonic.** It counts 3600 down to 0 through
 regulation and then **restarts at 600 for overtime**. Anything on a timeline
@@ -175,6 +175,24 @@ sacks taken and every quarterback's line on every game page — Geno Smith read
 passing yards were never wrong, because a sack is neither. The general lesson
 is that a flag in this data is named for what the feed needs it for, not for
 what a box score means by the same word.
+
+**`INA` is not a roster status.** Week 3's roster marked eleven players INA —
+all from Atlanta and Green Bay, the two clubs that had already played that
+week on the Thursday, and all with the description code A01, the same as an
+active player's. It is the game-day inactive list. Treated as anything other
+than active, five of them who had not yet played dropped out of the "active
+roster or has played" rule and lost their pages; emit.py now reads INA as ACT.
+`verify.py` still fails on any status code it does not know, which is how
+this was caught — keep it that way, and decide each new code on its merits.
+
+**`fixed_drive` and `drive` disagree at boundaries, and the summary columns
+follow `drive`.** Plays are grouped by `fixed_drive`, but every drive-level
+column (`drive_start_yard_line` and the rest) is repeated by the uncorrected
+`drive`. After Minnesota returned a punt for a touchdown at Tampa Bay, the
+kickoff that followed was `fixed_drive` 3 but `drive` 2, and carried drive 2's
+start: the TB 40, twenty yards from where drive 3 actually began. The summary
+is now read only off a row whose `drive` matches the one its group's own snaps
+carry; kickoffs and extra points get no vote.
 
 ## 4. Lessons from F1 that applied here, and how
 

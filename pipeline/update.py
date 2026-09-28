@@ -220,6 +220,13 @@ def main() -> int:
 
     ok, _ = run("Verifying against published results", [PY, "pipeline/verify.py"])
     if not ok:
+        # Report anyway. The first week this failed, the script stopped here and
+        # the week's report — new games, roster churn, any published game
+        # rewritten — was never printed; and once the fault was fixed and emit
+        # re-run, "before" was the already-emitted data, so there was nothing
+        # left to compare against. The report is exactly what is needed to
+        # judge a failure, so it is printed before giving up.
+        report(before, strict)
         print("\n\033[31mverify failed — site/data is written but wrong. Do not push.\033[0m")
         return 1
 

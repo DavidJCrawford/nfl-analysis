@@ -289,9 +289,17 @@ def check_actors(r: Report, game: dict) -> None:
                  f"{gid} play {p['id']}: a completed pass without air yards")
 
         # The two legs must add up to the play, which is the whole reason the
-        # replay is allowed to draw them separately. A lateral is the one case
-        # that cannot: more than one player carried it.
-        if "air" in p and "yac" in p and p.get("gain") is not None and "lateral" not in tags:
+        # replay is allowed to draw them separately. Two cases cannot. A
+        # lateral: more than one player carried it. And a fumble after the
+        # catch: the ball moves again with nobody carrying it, and the gain is
+        # measured to where it was recovered. Dallas at Baltimore, week 3 —
+        # Prescott to Ferguson "to BAL 24 for -1 yards", fumbled, recovered at
+        # the BAL 25: air -2, after the catch +1, gain -2, every one of them
+        # right. The replay draws the catch and then a run to the play's end
+        # spot rather than to catch-plus-YAC, so it puts the ball where
+        # Baltimore picked it up and never at a BAL 24 it then jumps back from.
+        if ("air" in p and "yac" in p and p.get("gain") is not None
+                and "lateral" not in tags and "fumble" not in tags):
             r.eq(round(p["air"] + p["yac"], 3), float(p["gain"]),
                  f"{gid} play {p['id']} air yards plus yards after catch vs the gain")
 
