@@ -56,8 +56,16 @@ const logFields = logGroup
   ? FIELDS[logGroup].filter((f) => p.log.some((r) => (r.stats[logGroup]?.[f.key] ?? 0) !== 0)).slice(0, 6)
   : [];
 
-const snapKey = logGroup === 'defence' ? 'def_pct' : 'off_pct';
-const anySnaps = p.log.some((r) => r.snaps?.[snapKey] !== undefined);
+/** Which unit's snaps to count: whichever he took most of across the season.
+ *  Not read off his statistics, because the man this column matters most for
+ *  has none — a special-teamer who covered kicks all afternoon, or a lineman
+ *  who played every down. */
+const UNITS = { off: 'offence', def: 'defence', st: 'special teams' } as const;
+type Unit = keyof typeof UNITS;
+const totalOf = (u: Unit) => p.log.reduce((n, r) => n + (r.snaps?.[u] ?? 0), 0);
+const unit: Unit = (['off', 'def', 'st'] as Unit[]).reduce((a, b) => (totalOf(b) > totalOf(a) ? b : a), 'off');
+const anySnaps = totalOf(unit) > 0;
+const snapHead = unit === 'off' ? 'Snaps' : `Snaps (${UNITS[unit]})`;
 
 const STATUS: Record<string, string> = {
   ACT: 'Active', RES: 'Injured reserve', DEV: 'Practice squad',
@@ -101,7 +109,8 @@ const title = p.name;
           ? <>No statistics this season. {p.status === 'ACT'
               ? <>He is on the active roster and has not yet recorded one.</>
               : <>He is {(STATUS[p.status] ?? p.status).toLowerCase()}.</>}</>
-          : <>Has appeared in {played} game{played === 1 ? '' : 's'} without recording a statistic — which, for a lineman, is a normal season.</>}
+          : <>Has played in {played} game{played === 1 ? '' : 's'}{unit === 'st' ? ', on special teams,' : ''} without
+              recording a statistic{(p.pos === 'OL') ? ' — which, for a lineman, is a normal season' : ''}.</>}
       </p>
     )}
   </header>
@@ -170,7 +179,7 @@ const title = p.name;
           <thead>
             <tr>
               <th class="n">Wk</th><th>Opponent</th><th class="n">Result</th>
-              {anySnaps && <th class="n" title="Share of his unit's snaps">Snaps</th>}
+              {anySnaps && <th class="n" title={`Snaps taken, and his share of the ${UNITS[unit]} snaps`}>{snapHead}</th>}
               {logFields.map((f) => <th class="n">{f.short}</th>)}
             </tr>
           </thead>
@@ -196,7 +205,12 @@ const title = p.name;
                   </td>
                   {anySnaps && (
                     <td class="n muted">
-                      <span class="spoil">{r.snaps?.[snapKey] !== undefined ? `${Math.round(r.snaps[snapKey]! * 100)}%` : '—'}</span>
+                      {/* The count, and the share of his unit's snaps beside it:
+                          22 on special teams is what a special-teamer did, and
+                          a percentage alone says only how it compares. */}
+                      <span class="spoil" style="--spoil-w:3.6em">{r.snaps?.[unit] !== undefined
+                        ? <>{r.snaps[unit]}<span class="share"> {Math.round((r.snaps[`${unit}_pct` as const] ?? 0) * 100)}%</span></>
+                        : '—'}</span>
                     </td>
                   )}
                   {logFields.map((f) => (
@@ -213,6 +227,8 @@ const title = p.name;
 </Base>
 
 <style>
+  .share { color: var(--ks-text-mute-deep); font-size: 0.86em; }
+
   .head { padding-bottom: clamp(20px, 2.6vw, 32px); }
   .titling {
     display: flex; align-items: center; gap: clamp(14px, 2vw, 24px);

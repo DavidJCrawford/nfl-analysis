@@ -1168,7 +1168,8 @@ def all_groups(row: dict) -> dict[str, dict]:
     return got
 
 
-def snap_index(season: int, roster: list[dict]) -> dict[tuple[str, str], dict]:
+def snap_index(season: int, roster: list[dict],
+               where: dict[tuple[str, str], dict] | None = None) -> dict[tuple[str, str], dict]:
     """Snaps per player per game, keyed (gsis_id, game_id).
 
     snap_counts is the only file that counts the offensive line, who play every
@@ -1213,6 +1214,8 @@ def snap_index(season: int, roster: list[dict]) -> dict[tuple[str, str], dict]:
                 snaps[key] = v
         if snaps:
             out[(pid, gid)] = snaps
+            if where is not None:
+                where[(pid, gid)] = {"team": s(r, "team"), "opp": s(r, "opponent"), "week": i(r, "week")}
     if lost:
         print(f"  {lost} snap-count row(s) matched no player")
     return out
@@ -1263,7 +1266,15 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
     totals = read_csv(CACHE / f"stats_player_reg_{season}.csv")
 
     by_id = {r["gsis_id"]: r for r in roster if r.get("gsis_id")}
-    played = {r["player_id"] for r in weeks if r.get("player_id")}
+    # Who has played: anyone with a statistic, and anyone who took a snap.
+    # The second half matters for special teams. A practice-squad player
+    # elevated for one game can cover a dozen kicks and record nothing, and
+    # read from the statistics alone he had not played at all — so he had a
+    # page while he was on the active roster and lost it the week he went back.
+    # Seven did that after week 3, Velus Jones Jr. after 22 snaps for Seattle.
+    where: dict[tuple[str, str], dict] = {}
+    snaps = snap_index(season, roster, where)
+    played = {r["player_id"] for r in weeks if r.get("player_id")} | {pid for pid, _ in snaps}
     # INA is not a roster status. It is the game-day inactive list: the week 3
     # file marks eleven players INA, every one of them from Atlanta or Green
     # Bay — the two clubs that had already played that week, on the Thursday —
@@ -1281,7 +1292,9 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
     weeks_by_id: dict[str, list[dict]] = collections.defaultdict(list)
     for r in weeks:
         weeks_by_id[r["player_id"]].append(r)
-    snaps = snap_index(season, roster)
+    snap_games: dict[str, list[str]] = collections.defaultdict(list)
+    for pid, gid in snaps:
+        snap_games[pid].append(gid)
     game_by_id = {g["id"]: g for g in games}
     faces = CACHE / "faces"
 
@@ -1294,7 +1307,15 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
             continue
         stats_row = total_by_id.get(pid)
         season_stats = all_groups(stats_row) if stats_row else {}
-        log = sorted(weeks_by_id.get(pid, []), key=lambda w: i(w, "week") or 0)
+        entries = [{"game": s(w, "game_id"), "week": i(w, "week"), "team": s(w, "team"),
+                    "opp": s(w, "opponent_team"), "stats": all_groups(w)}
+                   for w in weeks_by_id.get(pid, [])]
+        with_stats = {e["game"] for e in entries}
+        for gid in snap_games.get(pid, []):
+            if gid not in with_stats:
+                m = where[(pid, gid)]
+                entries.append({"game": gid, "week": m["week"], "team": m["team"], "opp": m["opp"], "stats": {}})
+        log = sorted(entries, key=lambda e: e["week"] or 0)
 
         # The index carries what a list of players has to show; the detail file
         # carries the rest. Same split as schedule.json against games/.
@@ -1348,18 +1369,12 @@ def emit_people(season: int, live: set[str], games: list[dict]) -> tuple[int, in
             "stats": season_stats,
             "log": [],
         }
-        for w in log:
-            gid = s(w, "game_id")
+        for e in log:
+            gid = e["game"]
             g = game_by_id.get(gid or "")
-            row = {
-                "week": i(w, "week"),
-                "game": gid,
-                "team": s(w, "team"),
-                "opp": s(w, "opponent_team"),
-                "stats": all_groups(w),
-            }
+            row = {"week": e["week"], "game": gid, "team": e["team"], "opp": e["opp"], "stats": e["stats"]}
             if g:
-                own = g["home"] if g["home"] == s(w, "team") else g["away"]
+                own = g["home"] if g["home"] == e["team"] else g["away"]
                 row["home"] = g["home"] == own
                 if g["played"]:
                     hs, aws = g.get("home_score"), g.get("away_score")

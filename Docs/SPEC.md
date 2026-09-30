@@ -71,7 +71,15 @@ pain the F1 project was built around.
 Attribution is a licence condition, not courtesy. A credits page carries it, as
 in F1.
 
-**Who gets a player page: active rosters ∪ everyone who has played.** 1,743
+**Who gets a player page: active rosters ∪ everyone who has played** — and
+"played" means took a snap, not recorded a statistic. Read from the statistics
+alone, a special-teamer elevated from the practice squad for one game, who
+covered kicks all afternoon and recorded nothing, had not played at all: he had
+a page while he was on the active roster and lost it the week he was sent back.
+Snap counts settle it, and they gave every lineman on the site a game log where
+his page had said "no statistics".
+
+**The earlier wording of the same rule:** 1,743
 people. The union is not tidiness. 1,693 are on an active roster and 1,306 have
 recorded a statistic, but fifty-one of those have since gone to a practice
 squad or injured reserve — and their names are in game pages that are already
