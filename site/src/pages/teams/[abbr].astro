@@ -122,13 +122,17 @@ const STATUS: Record<string, string> = {
     <div class="titling">
       {/* Decorative: the club's name is right beside it. One file, the club
           whose page this is — the same rule a game page follows. */}
-      <img class="crest" src={u(`/logos/${abbr}.png`)} alt="" width="64" height="64" />
-      <h1 class="display">
-        <span class="place">{team.name.replace(` ${team.nick}`, '')}</span>
-        <span class="nick">{team.nick}</span>
-      </h1>
-      <CompareDialog kind="team" id={abbr} name={team.nick} />
-      <CompareDialog kind="team" id={abbr} name={team.nick} mode="practice" />
+      <div class="naming">
+        <img class="crest" src={u(`/logos/${abbr}.png`)} alt="" width="64" height="64" />
+        <h1 class="display">
+          <span class="place">{team.name.replace(` ${team.nick}`, '')}</span>
+          <span class="nick">{team.nick}</span>
+        </h1>
+      </div>
+      <div class="actions">
+        <CompareDialog kind="team" id={abbr} name={team.nick} />
+        <CompareDialog kind="team" id={abbr} name={team.nick} mode="practice" />
+      </div>
     </div>
 
     <div class="stats">
@@ -270,10 +274,19 @@ const STATUS: Record<string, string> = {
   .titling {
     display: flex; align-items: center; gap: clamp(14px, 1.8vw, 28px);
     margin-top: clamp(8px, 1vw, 14px);
-    --naming-h: calc(var(--ks-type-display-size) * 1.42);
   }
-  .titling .display { min-width: 0; }
-  .crest { flex: none; height: calc(var(--naming-h) * 1.25); width: auto; aspect-ratio: 1; }
+  /* The crest and the name take what the buttons leave, and the name is
+     sized to fit it: the widest of the 32 — "Commanders", with its crest —
+     is 5.75 of its own type size across, so the type is the room less the gap
+     over 5.75, and never more than the display size. On a phone the club's
+     name gets smaller rather than the buttons going under it. */
+  .naming {
+    flex: 1 1 0; min-width: 0; container-type: inline-size;
+    display: flex; align-items: center; gap: clamp(14px, 1.8vw, 28px);
+    --name-size: min(var(--ks-type-display-size), calc((100cqi - clamp(14px, 1.8vw, 28px)) / 5.75));
+  }
+  .naming .display { font-size: var(--name-size); min-width: 0; }
+  .crest { flex: none; height: calc(var(--name-size) * 1.42 * 1.25); width: auto; aspect-ratio: 1; }
   .display .place { display: block; font-size: 0.42em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ks-text-muted); font-family: var(--ks-font), sans-serif; font-weight: 500; }
   .display .nick { display: block; }
   .stats {
@@ -288,9 +301,13 @@ const STATUS: Record<string, string> = {
      used to sit under the stat row, which is capped at 760px — so on a wide
      screen it stood alone in the empty quarter of the page with nothing to
      belong to. */
-  .titling :global(.compare-open) { align-self: center; }
-  .titling :global(.compare-open[data-compare-open="compare"]) { margin-left: auto; }
-  .titling :global(.compare-open[data-compare-open="practice"]) { margin-left: calc(10px - clamp(14px, 1.8vw, 28px)); }
+  .actions { flex: none; display: flex; gap: 10px; align-items: center; }
+  /* On a phone the two stack, the same width, beside the name. (Side by side
+     they covered "Seahawks".) */
+  @media (max-width: 640px) {
+    .actions { flex-direction: column; align-items: stretch; gap: 8px; }
+    .actions :global(.compare-open) { justify-content: center; }
+  }
 
   .weeks { list-style: none; margin: 28px 0 0; padding: 0; max-width: 780px; }
   .week { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--ks-rule); }
