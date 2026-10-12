@@ -7,7 +7,7 @@
 CACHE ?= .cache/nflverse
 SITE  := site
 
-.PHONY: help fetch emit verify data week build links preview check clean
+.PHONY: help fetch emit verify data week build links preview check clean research calibrate
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  %-10s %s\n", $$1, $$2}'
@@ -35,6 +35,12 @@ links: ## Check the built site for links that go nowhere
 
 preview: ## Serve the built site
 	cd $(SITE) && npm run preview
+
+research: ## Practice mode: measure the 2025 league tables (downloads 2025 data once)
+	python3 pipeline/practice.py league
+
+calibrate: ## Practice mode: the engine plays itself; ARGS=fit refits the QB's habits
+	cd $(SITE) && npx esbuild scripts/calibrate.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/calibrate.mjs && node node_modules/.cache/calibrate.mjs $(ARGS)
 
 check: ## Type check
 	cd $(SITE) && npm run check

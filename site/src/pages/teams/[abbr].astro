@@ -128,6 +128,7 @@ const STATUS: Record<string, string> = {
         <span class="nick">{team.nick}</span>
       </h1>
       <CompareDialog kind="team" id={abbr} name={team.nick} />
+      <CompareDialog kind="team" id={abbr} name={team.nick} mode="practice" />
     </div>
 
     <div class="stats">
@@ -287,7 +288,9 @@ const STATUS: Record<string, string> = {
      used to sit under the stat row, which is capped at 760px — so on a wide
      screen it stood alone in the empty quarter of the page with nothing to
      belong to. */
-  .titling :global(.compare-open) { margin-left: auto; align-self: center; }
+  .titling :global(.compare-open) { align-self: center; }
+  .titling :global(.compare-open[data-compare-open="compare"]) { margin-left: auto; }
+  .titling :global(.compare-open[data-compare-open="practice"]) { margin-left: calc(10px - clamp(14px, 1.8vw, 28px)); }
 
   .weeks { list-style: none; margin: 28px 0 0; padding: 0; max-width: 780px; }
   .week { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--ks-rule); }

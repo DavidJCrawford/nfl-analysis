@@ -1,0 +1,302 @@
+---
+/** Practice: the user's club against another, snap by snap.
+ *
+ *  One page for every pairing, the pair in the query string, as the club
+ *  comparison is — `?team=KC&vs=BUF`, and `&q=8` for eight-minute quarters.
+ *  Everything on it is drawn in the browser from the files
+ *  pipeline/practice.py writes; Docs/PRACTICE.md is how it decides things.
+ *
+ *  It is the replay's screen, as nearly as a different job allows: the dark
+ *  stage, the field across it, the bug beneath, Close in the corner. Where
+ *  the replay has its strip and its transport keys, this has the play-caller's
+ *  tray.
+ */
+import Base from '@layouts/Base.astro';
+import { u } from '@lib/url';
+---
+<Base title="Practice" description="Call the plays for an NFL club against the computer, on a field simulated from the league's own numbers." bare>
+  <div class="pr" data-practice>
+    <a class="pr-close" href={u('/teams/')} data-close>Close</a>
+
+    {/* Reached with spoilers off by a bookmark — the button that opens it is
+        not shown then — there is nothing to play: each club is played as its
+        season says it plays, and that is the season. */}
+    <div class="spoil-note pr-spoil">
+      <p>Practice plays each club as its 2026 season says it plays, so it is closed while spoilers are off.</p>
+      <button class="pr-go" type="button" data-show-spoilers>Show spoilers</button>
+    </div>
+
+    <div class="pr-field spoil-block">
+      <canvas data-field aria-label="The practice field"></canvas>
+      <p class="pr-beat" data-beat aria-live="polite"></p>
+      <div class="pr-tip" data-tip hidden aria-hidden="true"></div>
+    </div>
+
+    <header class="pr-bug-row spoil-block">
+      <div class="pr-bug">
+        <div class="side" data-side="user">
+          <span class="edge" aria-hidden="true"></span>
+          <img class="mark" alt="" width="40" height="40" />
+          <span class="who"></span>
+          <span class="pts num">0</span>
+        </div>
+        <div class="middle">
+          <p class="dd" data-down>—</p>
+          <p class="clock" data-clock></p>
+        </div>
+        <div class="side cpu" data-side="cpu">
+          <span class="pts num">0</span>
+          <span class="who"></span>
+          <img class="mark" alt="" width="40" height="40" />
+          <span class="edge" aria-hidden="true"></span>
+        </div>
+      </div>
+    </header>
+
+    {/* Everything the user reads or chooses is here — the other side's look,
+        the calls, the player picked on the field, what just happened and why.
+        Nothing is put over the field: it is the thing being watched. */}
+    <aside class="pr-tray spoil-block" data-tray aria-live="polite"></aside>
+  </div>
+
+  <noscript>
+    <p class="pr-noscript">Practice is played in the browser, and needs JavaScript.</p>
+  </noscript>
+</Base>
+
+<script>
+  import { mountPractice } from '@lib/practice/ui';
+  mountPractice();
+</script>
+
+<style is:global>
+  /* Global, scoped by hand under .pr: nearly everything here is built by the
+     script and so never carries Astro's scope attribute. */
+  .pr {
+    position: relative;
+    height: 100dvh; overflow: hidden;
+    display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(0, auto);
+    gap: clamp(5px, 0.7vw, 9px);
+    --pad: clamp(10px, 1.4vw, 18px);
+    padding: var(--pad);
+    background: var(--ks-instrument-deep);
+    color: var(--ks-instrument-text);
+  }
+  html[data-spoilers='off'] .pr { grid-template-rows: 1fr; grid-template-columns: 1fr; grid-template-areas: none; }
+
+  .pr-close {
+    position: absolute; top: calc(var(--pad) + 8px); right: calc(var(--pad) + 8px); z-index: 6;
+    background: oklch(17% 0 0 / 0.85); color: var(--ks-instrument-muted);
+    border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-pill);
+    padding: 6px 16px; text-decoration: none;
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .pr-close:hover { color: var(--ks-instrument-text); border-color: var(--ks-instrument-text); }
+  .pr-close:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 3px; }
+
+  .pr-spoil { align-self: center; justify-self: center; max-width: 34em; text-align: center; }
+  .pr-spoil p { color: var(--ks-instrument-muted); }
+
+  .pr-field { position: relative; min-height: 0; overflow: hidden; border-radius: var(--ks-radius-sm); }
+  .pr-field canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* What happens as it happens: a word over the field, briefly. */
+  .pr-beat {
+    position: absolute; left: 50%; top: 8px; margin: 0;
+    transform: translate(-50%, -6px); opacity: 0; pointer-events: none;
+    padding: 4px 14px; border-radius: var(--ks-radius-pill);
+    background: oklch(17% 0 0 / 0.86); border: 1px solid var(--ks-instrument-rule);
+    font-size: var(--ks-type-ui-size); font-weight: 600; letter-spacing: 0.02em; white-space: nowrap;
+    transition: opacity 180ms var(--ks-ease), transform 180ms var(--ks-ease);
+  }
+  .pr-beat.show { opacity: 1; transform: translate(-50%, 0); }
+  .pr-beat[data-tone='good'] { color: oklch(86% 0.14 150); }
+  .pr-beat[data-tone='bad'] { color: oklch(78% 0.15 28); }
+
+  /* On hover, a player's season: a label that follows the pointer. */
+  .pr-tip {
+    position: absolute; z-index: 4; pointer-events: none; width: min(290px, calc(100% - 16px));
+    padding: 12px 14px; border-radius: var(--ks-radius-md);
+    background: oklch(21% 0 0 / 0.97); border: 1px solid var(--ks-instrument-rule);
+    box-shadow: var(--ks-lift-2); font-size: var(--ks-type-small-size);
+  }
+  .pr-tip[hidden] { display: none; }
+
+  /* ── The bug, as the replay's. */
+  .pr-bug-row { display: flex; justify-content: center; }
+  .pr-bug {
+    display: flex; align-items: stretch;
+    background: var(--ks-instrument); border: 1px solid var(--ks-instrument-rule);
+    border-radius: var(--ks-radius-sm); overflow: hidden; box-shadow: var(--ks-lift-1);
+    font-variant-numeric: var(--f1-numeric);
+  }
+  .pr-bug .side { display: flex; align-items: center; gap: clamp(6px, 1.2vw, 12px); min-width: clamp(110px, 20vw, 220px); position: relative; }
+  .pr-bug .side.cpu { justify-content: flex-end; }
+  .pr-bug .edge { width: 6px; align-self: stretch; }
+  .pr-bug .mark { width: clamp(28px, 3vw, 40px); height: auto; margin-inline: clamp(6px, 1vw, 12px); }
+  .pr-bug .who { font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ks-instrument-muted); }
+  .pr-bug .pts {
+    font-family: var(--ks-font-display), sans-serif; font-weight: 200; line-height: 1;
+    font-size: clamp(1.7rem, 3vw, 2.5rem); min-width: 1.5ch; text-align: center; color: var(--ks-instrument-muted);
+    margin-inline: clamp(6px, 1vw, 12px);
+  }
+  .pr-bug .side.lead .pts { color: var(--ks-instrument-text); }
+  /* The side with the ball: a small ball by its name, as broadcasts do. */
+  .pr-bug .side.has-ball .who::after {
+    content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 6px; vertical-align: 1px;
+    border-radius: 50%; background: oklch(60% 0.11 50); box-shadow: 0 0 0 1px oklch(96% 0 0 / 0.7);
+  }
+  .pr-bug .middle { display: flex; flex-direction: column; border-inline: 1px solid var(--ks-instrument-rule); min-width: clamp(130px, 22vw, 230px); }
+  .pr-bug .dd {
+    margin: 0; padding: 6px 14px 5px; text-align: center; white-space: nowrap;
+    background: var(--ks-instrument-raised); font-size: var(--ks-type-title-size); font-weight: 600;
+  }
+  .pr-bug .clock { margin: 0; min-height: calc(1.5em + 10px); padding: 4px 12px 6px; text-align: center; white-space: nowrap; font-size: var(--ks-type-small-size); color: var(--ks-instrument-muted); }
+
+  /* ── The panel. A column of sections, each with a rule above it. */
+  /* The panel scrolls, and a scrolling box clips whatever stands outside it —
+     which a focus ring does by design, by four pixels. The inline padding is
+     that room, so the ring round a control at the panel's edge is drawn
+     whole. */
+  .pr-tray {
+    display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding-inline: 5px;
+  }
+  .pr-tray:empty { display: none; }
+  .pr-sec { padding: 14px 0; border-top: 1px solid var(--ks-instrument-rule); display: flex; flex-direction: column; gap: 10px; }
+  .pr-sec:first-child { border-top: 0; padding-top: 2px; }
+  .pr-sec:empty { display: none; }
+  .pr-eyebrow {
+    margin: 0; font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-instrument-muted);
+  }
+  .pr-title {
+    margin: 0; font-family: var(--ks-font-display), var(--ks-font), sans-serif; font-weight: 300;
+    font-size: clamp(1.4rem, 2.2vw, 1.9rem); line-height: 1.05;
+  }
+  .pr-lede { margin: 0; font-size: var(--ks-type-ui-size); line-height: 1.45; }
+  .pr-note { margin: 0; font-size: var(--ks-type-small-size); color: var(--ks-instrument-muted); line-height: 1.5; }
+  .pr-scout .pr-lede { font-weight: 600; }
+
+  /* Dropdowns. */
+  .pr-calls { gap: 14px; }
+  .pr-ctl { display: flex; flex-direction: column; gap: 6px; }
+  .pr-label {
+    font-size: var(--ks-type-eyebrow-size); letter-spacing: var(--ks-type-eyebrow-track);
+    text-transform: uppercase; color: var(--ks-instrument-muted);
+  }
+  .pr-select {
+    appearance: none; -webkit-appearance: none;
+    width: 100%; height: 40px; padding: 0 38px 0 12px;
+    background-color: var(--ks-instrument-raised); color: var(--ks-instrument-text);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23b3b3b3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    border: 1px solid var(--ks-instrument-rule); border-radius: 8px;
+    font: inherit; font-size: var(--ks-type-ui-size); cursor: pointer;
+  }
+  .pr-select:hover { border-color: oklch(100% 0 0 / 0.32); }
+  .pr-select:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 1px; }
+  .pr-select option, .pr-select optgroup { background: var(--ks-instrument); color: var(--ks-instrument-text); }
+  .pr-hint { font-size: var(--ks-type-small-size); color: var(--ks-instrument-muted); line-height: 1.45; }
+
+  /* A player picked on the field. */
+  .pr-who { display: flex; align-items: center; gap: 10px; }
+  .pr-no {
+    flex: none; width: 36px; height: 36px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; font-size: 0.95rem;
+    box-shadow: inset 0 0 0 1.5px oklch(100% 0 0 / 0.5);
+  }
+  .pr-name { display: block; font-weight: 600; font-size: var(--ks-type-ui-size); }
+  .pr-sub { display: block; color: var(--ks-instrument-muted); font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.06em; text-transform: uppercase; }
+  .pr-season { margin: 8px 0 0; color: var(--ks-instrument-muted); font-size: var(--ks-type-small-size); line-height: 1.45; }
+
+  /* What happened. */
+  .pr-result-head { display: flex; align-items: center; gap: 12px; }
+  .pr-result-head .pr-title { flex: 1; }
+  .pr-bar { width: 5px; align-self: stretch; border-radius: 3px; }
+  .pr-gain {
+    margin: 0; font-family: var(--ks-font-display), var(--ks-font), sans-serif; font-weight: 200;
+    font-size: clamp(1.7rem, 3vw, 2.4rem); line-height: 1; font-variant-numeric: var(--f1-numeric);
+  }
+  .pr-gain.good { color: oklch(86% 0.14 150); }
+  .pr-gain.bad { color: oklch(78% 0.15 28); }
+  .pr-events { margin: 0; padding-left: 1.1em; font-size: var(--ks-type-small-size); line-height: 1.5; }
+  .pr-why ul { margin: 0; padding-left: 1.1em; color: var(--ks-instrument-muted); font-size: var(--ks-type-small-size); line-height: 1.5; }
+  .pr-why li + li { margin-top: 5px; }
+  .pr-box { width: 100%; border-collapse: collapse; font-variant-numeric: var(--f1-numeric); font-size: var(--ks-type-small-size); }
+  .pr-box th, .pr-box td { padding: 4px 6px; border-bottom: 1px solid var(--ks-instrument-rule); text-align: right; }
+  .pr-box th:first-child { text-align: left; color: var(--ks-instrument-muted); font-weight: 400; }
+  .pr-box tr:first-child th { color: var(--ks-instrument-muted); font-weight: 600; letter-spacing: 0.06em; }
+
+  /* Buttons. The one that moves the game on is gold, and there is only ever
+     one of them. */
+  .pr-actions {
+    position: sticky; bottom: 0; margin-top: auto;
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 12px 0 6px; border-top: 1px solid var(--ks-instrument-rule);
+    background: var(--ks-instrument-deep);
+  }
+  .pr-choices { gap: 8px; }
+  .pr-btn, .pr-go, .pr-key {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: var(--ks-control-md); padding: 0 16px; border-radius: var(--ks-radius-pill);
+    font: inherit; cursor: pointer; text-decoration: none; white-space: nowrap;
+  }
+  .pr-btn {
+    background: var(--ks-instrument); color: var(--ks-instrument-text);
+    border: 1px solid var(--ks-instrument-rule); font-size: var(--ks-type-small-size);
+  }
+  .pr-btn:hover:not(:disabled) { border-color: oklch(100% 0 0 / 0.4); }
+  .pr-btn:disabled { opacity: 0.35; cursor: default; }
+  .pr-btn.pr-quiet { align-self: flex-start; height: 30px; padding: 0 12px; color: var(--ks-instrument-muted); }
+  .pr-go {
+    margin-left: auto; padding: 0 26px;
+    background: var(--ks-kinpaku); color: oklch(18% 0 0); border: 0;
+    font-size: var(--ks-type-eyebrow-size); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    box-shadow: var(--ks-lift-1);
+  }
+  .pr-go:hover { box-shadow: var(--ks-lift-2); }
+  .pr-wide { width: 100%; margin-left: 0; }
+  .pr-btn:focus-visible, .pr-go:focus-visible, .pr-key:focus-visible { outline: 2px solid var(--ks-kinpaku); outline-offset: 2px; }
+  .pr-speed { display: flex; gap: 3px; margin-right: auto; }
+  .pr-key {
+    height: 28px; padding: 0 9px; background: transparent; color: var(--ks-instrument-muted);
+    border: 1px solid var(--ks-instrument-rule); font-size: var(--ks-type-small-size);
+  }
+  .pr-key[aria-pressed='true'] { background: var(--ks-instrument-text); color: var(--ks-instrument-deep); border-color: var(--ks-instrument-text); }
+
+  .pr-noscript { padding: 40px; color: var(--ks-instrument-text); background: var(--ks-instrument-deep); }
+
+  /* On a wide screen the panel goes beside the field rather than under it.
+     The field is laid along the screen and is as tall as the screen lets it
+     be, so everything under it was taken off its scale; at the side it costs
+     only length the field had to spare. */
+  @media (min-width: 960px) and (min-aspect-ratio: 5/4) {
+    .pr {
+      grid-template-columns: minmax(0, 1fr) clamp(300px, 25vw, 380px);
+      grid-template-rows: minmax(0, 1fr) auto;
+      grid-template-areas: 'field tray' 'bug tray';
+      /* No gap: the panel's rule is the edge of the field. */
+      column-gap: 0;
+    }
+    .pr-field { grid-area: field; }
+    .pr-bug-row { grid-area: bug; }
+    /* A rule down its left edge, the same as the bug's border, so the panel
+       reads as its own column rather than text loose on the black. */
+    .pr-tray {
+      grid-area: tray; padding-top: 44px;
+      border-left: 1px solid var(--ks-instrument-rule);
+      padding-left: clamp(14px, 1.6vw, 22px);
+    }
+    .pr-close { top: var(--pad); }
+  }
+
+  /* Under the field, on a narrow screen: a few rows' worth, scrolling. */
+  @media not ((min-width: 960px) and (min-aspect-ratio: 5/4)) {
+    .pr-tray { max-height: 46dvh; }
+  }
+  @media (max-width: 700px) {
+    .pr-bug .who { display: none; }
+    .pr-beat { top: auto; bottom: 8px; }
+  }
+</style>

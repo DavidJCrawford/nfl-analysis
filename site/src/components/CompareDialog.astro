@@ -1,6 +1,10 @@
 ---
 /** "Compare" — a button in the replay's clothes, and the modal behind it.
  *
+ *  For a club it also serves "Practice": the same button, the same picker of
+ *  the other 31, and a link to the practice field instead of the comparison
+ *  — choosing an opponent is the same act whichever screen follows it.
+ *
  *  The two kinds differ in one way that matters. There are 31 other clubs, so
  *  they are written into the page: the modal opens instantly and works with
  *  nothing fetched. There are 1,742 other players, so those are fetched the
@@ -23,16 +27,24 @@ interface Props {
   name: string;
   /** For a player: his position, which the list opens on. */
   pos?: string | null;
+  /** Clubs only: whether the picked club is compared with, or practised
+   *  against. */
+  mode?: 'compare' | 'practice';
 }
-const { kind, id, name, pos = null } = Astro.props;
+const { kind, id, name, pos = null, mode = 'compare' } = Astro.props;
+const label = mode === 'practice' ? 'Practice' : 'Compare';
+const href = (abbr: string) => mode === 'practice'
+  ? u(`/practice/?team=${id}&vs=${abbr}`)
+  : u(`/compare/teams/?a=${id}&b=${abbr}`);
 
 const teams = getTeams();
 const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
 ---
 
 {/* Not offered with spoilers off: a comparison is two seasons' results side
-    by side, and the screen it opens is empty until they are shown. */}
-<button class="compare-open spoil-gone" type="button" data-compare-open>Compare</button>
+    by side, and the screen it opens is empty until they are shown. Practice
+    plays each club as its season says it plays, which is the season again. */}
+<button class="compare-open spoil-gone" type="button" data-compare-open={mode}>{label}</button>
 
 <dialog
   class="compare-dialog"
@@ -40,12 +52,13 @@ const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
   data-kind={kind}
   data-id={id}
   data-pos={pos ?? ''}
-  aria-label={`Compare ${name} with another ${kind}`}
+  data-mode={mode}
+  aria-label={mode === 'practice' ? `Practise ${name} against another club` : `Compare ${name} with another ${kind}`}
 >
   <div class="cd-inner">
     <header class="cd-head">
       <div>
-        <p class="cd-eyebrow">Compare</p>
+        <p class="cd-eyebrow">{label}</p>
         <h2 class="cd-title">{name} against…</h2>
       </div>
       <button class="cd-close" type="button" data-compare-close aria-label="Close">Close</button>
@@ -61,7 +74,7 @@ const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
 
     <div class="cd-list" data-cd-list>
       {kind === 'team' && others.map((abbr) => (
-        <a class="cd-item" href={u(`/compare/teams/?a=${id}&b=${abbr}`)}>
+        <a class="cd-item" href={href(abbr)}>
           <img src={u(`/logos/sm/${abbr}.webp`)} alt="" width="34" height="34" />
           <span class="cd-name">{teams[abbr]!.nick}</span>
           <span class="cd-sub">{teams[abbr]!.div}</span>
@@ -77,8 +90,9 @@ const others = kind === 'team' ? getTeamOrder().filter((a) => a !== id) : [];
 
   for (const dialog of document.querySelectorAll<HTMLDialogElement>('[data-compare-dialog]')) {
     const root = dialog.parentElement!;
-    const open = root.querySelector<HTMLButtonElement>('[data-compare-open]')
-      ?? document.querySelector<HTMLButtonElement>('[data-compare-open]')!;
+    // Compare and Practice can share a parent, so each finds its own button.
+    const sel = `[data-compare-open="${dialog.dataset.mode ?? 'compare'}"]`;
+    const open = root.querySelector<HTMLButtonElement>(sel) ?? document.querySelector<HTMLButtonElement>(sel)!;
     const list = dialog.querySelector<HTMLElement>('[data-cd-list]')!;
     const kind = dialog.dataset.kind;
     const me = dialog.dataset.id!;

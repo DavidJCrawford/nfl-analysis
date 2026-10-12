@@ -259,6 +259,11 @@ def main() -> int:
         print("\n\033[31mverify failed — site/data is written but wrong. Do not push.\033[0m")
         return 1
 
+    # Practice mode's club files — lineups and rates — follow the week too.
+    ok, _ = run("Practice mode club files", [PY, "pipeline/practice.py", "teams"])
+    if not ok:
+        return 1
+
     if build:
         ok, _ = run("Building the site", ["npm", "run", "build"], cwd=ROOT / "site")
         if not ok:
