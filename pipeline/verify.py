@@ -409,10 +409,20 @@ def check_snap(r: Report, game: dict) -> None:
                 break
         return None
 
+    # A drive with two passers named on it — a quarterback change, a trick
+    # play — is one the method cannot get right and does not claim to: the
+    # replay says so by drawing the badge as an outline. Those drives are left
+    # out, so that what is held to account is the method, not the game. (2026
+    # week 5, BAL at ATL: a receiver's pass on a trick play, and three snaps
+    # for the backup in the middle of a drive, took the game to 93%.)
+    passers: dict = {}
+    for p in plays:
+        if (who := (p.get("act") or {}).get("pass")):
+            passers.setdefault(p.get("drive"), set()).add(who["n"])
     hit = miss = 0
     for k, p in enumerate(plays):
         named = (p.get("act") or {}).get("pass")
-        if not named:
+        if not named or len(passers.get(p.get("drive"), ())) > 1:
             continue
         guess = nearest(k)
         if guess is None:

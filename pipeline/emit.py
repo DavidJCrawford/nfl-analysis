@@ -623,9 +623,15 @@ def build_play(r: dict, home: str, away: str, notes: list[str],
         fum: dict = {"by": {"n": who, "j": jersey_of(play["desc"], who)},
                      "team": s(r, "fumbled_1_team"),
                      "lost": flag(r, "fumble_lost")}
-        if (rec := s(r, "fumble_recovery_1_player_name")):
+        # The recovery is the last one: a ball fumbled, recovered, and fumbled
+        # again on the same play has a second recovery, and that is who has it
+        # when the whistle goes. (2026 week 5, CLE at NYJ: Watson sacked,
+        # fumbles, picks it up, fumbles again, and the Jets recover — the first
+        # recovery is Cleveland's, the second the one that counts.)
+        n = 2 if s(r, "fumble_recovery_2_team") else 1
+        if (rec := s(r, f"fumble_recovery_{n}_player_name")):
             fum["rec"] = {"n": rec, "j": jersey_of(play["desc"], rec)}
-        if (rt := s(r, "fumble_recovery_1_team")):
+        if (rt := s(r, f"fumble_recovery_{n}_team")):
             fum["rec_team"] = rt
         if (ff := s(r, "forced_fumble_player_1_player_name")):
             fum["forced"] = ff
