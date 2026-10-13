@@ -155,7 +155,6 @@ export async function mountPractice(): Promise<void> {
   let mt = 0;                          // seconds into it
   let shownBeats = 0;
   let camera: number | null = null;
-  let speed = 1;
   let onFirstDone: (() => void) | null = null;
   let onAllDone: (() => void) | null = null;
   let result: Result | null = null;
@@ -407,7 +406,7 @@ export async function mountPractice(): Promise<void> {
     // picture at frame -1 and the camera at NaN for good.
     const dt = clamp((now - last) / 1000, 0, 0.05);
     last = now;
-    mt += dt * speed;
+    mt += dt;
     const reel = cur.reel;
     const f = clamp(Math.floor(mt * FPS), 0, reel.frames - 1);
     const dir = dirOf(cur.side, cur.q);
@@ -536,17 +535,6 @@ export async function mountPractice(): Promise<void> {
     return d;
   };
 
-  function speedKeys(): HTMLElement {
-    const d = el('div', 'pr-speed');
-    d.setAttribute('role', 'group'); d.setAttribute('aria-label', 'Speed');
-    for (const s of [0.5, 1, 2]) {
-      const b = button(s === 0.5 ? '½×' : `${s}×`, () => { speed = s; for (const x of d.children) x.setAttribute('aria-pressed', String(x === b)); }, 'pr-key');
-      b.setAttribute('aria-pressed', String(speed === s));
-      d.append(b);
-    }
-    return d;
-  }
-
   // ── Painting the panel for each mode.
   function paint(): void {
     paintBug();
@@ -554,7 +542,7 @@ export async function mountPractice(): Promise<void> {
     if (mode === 'intro') parts.push(...introPanel());
     else if (mode === 'call') parts.push(...(game.userOnOffence ? offencePanel() : defencePanel()));
     else if (mode === 'fourth') parts.push(...fourthPanel());
-    else if (mode === 'play') parts.push(section('pr-playing', el('p', 'pr-eyebrow', 'In play'), el('p', 'pr-lede', playing)), actions(speedKeys(), button('Skip', skip)));
+    else if (mode === 'play') parts.push(section('pr-playing', el('p', 'pr-eyebrow', 'In play'), el('p', 'pr-lede', playing)), actions(button('Skip', skip)));
     else if (mode === 'result') parts.push(...resultPanel());
     else if (mode === 'over') parts.push(...overPanel());
     panel.replaceChildren(...parts);
@@ -756,7 +744,7 @@ export async function mountPractice(): Promise<void> {
       }
       out.push(sec);
     }
-    out.push(actions(speedKeys(), button(game.phase === 'over' ? 'Final score' : 'Next snap', next, 'pr-go')));
+    out.push(actions(button(game.phase === 'over' ? 'Final score' : 'Next snap', next, 'pr-go')));
     return out;
   }
 
