@@ -220,22 +220,24 @@ const payload = {
 
       <footer class="transport">
         <div class="buttons">
-          {/* Each pair is one glyph and its own mirror, rather than the two
-              characters the alphabet offers for the two directions: those are
-              not true mirrors of each other in any font, and the left one came
-              out a pixel and a half wider than the right. */}
-          <button type="button" data-first aria-label="First play"><span class="ico end flip">⏭</span></button>
-          <button type="button" data-prev aria-label="Previous play"><span class="ico flip">▶︎</span></button>
-          <button class="play" type="button" data-play aria-label="Play">▶</button>
-          <button type="button" data-next aria-label="Next play"><span class="ico">▶︎</span></button>
-          <button type="button" data-last aria-label="Last play"><span class="ico end">⏭</span></button>
+          {/* Drawn, not typed. The characters for these — ⏭ and ▶ — are
+              emoji on a phone, and iOS set the jump keys as blue tiles. Each
+              pair is one drawing and its own mirror, so the two directions are
+              true mirrors of each other. */}
+          <button type="button" data-first aria-label="First play"><svg class="ico flip" viewBox="0 0 12 10" width="12" height="10" aria-hidden="true"><path d="M0.5 0.5 L7.5 5 L0.5 9.5 Z" /><rect x="8.8" y="0.5" width="2.2" height="9" rx="0.4" /></svg></button>
+          <button type="button" data-prev aria-label="Previous play"><svg class="ico flip" viewBox="0 0 8 10" width="8" height="10" aria-hidden="true"><path d="M0.5 0.5 L7.5 5 L0.5 9.5 Z" /></svg></button>
+          <button class="play" type="button" data-play aria-label="Play"><svg class="ico" viewBox="0 0 12 14" width="12" height="14" aria-hidden="true" data-glyph="play"><path d="M1 1 L11.5 7 L1 13 Z" /></svg><svg class="ico" viewBox="0 0 12 14" width="12" height="14" aria-hidden="true" data-glyph="pause" data-off><rect x="1" y="1" width="3.6" height="12" rx="0.6" /><rect x="7.4" y="1" width="3.6" height="12" rx="0.6" /></svg></button>
+          <button type="button" data-next aria-label="Next play"><svg class="ico" viewBox="0 0 8 10" width="8" height="10" aria-hidden="true"><path d="M0.5 0.5 L7.5 5 L0.5 9.5 Z" /></svg></button>
+          <button type="button" data-last aria-label="Last play"><svg class="ico" viewBox="0 0 12 10" width="12" height="10" aria-hidden="true"><path d="M0.5 0.5 L7.5 5 L0.5 9.5 Z" /><rect x="8.8" y="0.5" width="2.2" height="9" rx="0.4" /></svg></button>
         </div>
         <div class="speeds" role="group" aria-label="Speed">
           <button type="button" data-speed="0.5">½×</button>
           <button type="button" data-speed="1" aria-pressed="true">1×</button>
           <button type="button" data-speed="2">2×</button>
         </div>
-        <p class="count"><span data-index>1</span> / {frames.length}</p>
+        {/* As wide from the first play as at the last, so it does not move
+            along — or onto a row of its own — as the number grows. */}
+        <p class="count" style={`--digits:${String(frames.length).length}`}><span data-index>1</span> / {frames.length}</p>
       </footer>
 
     </div>
@@ -644,8 +646,8 @@ const payload = {
      triangle in it comes out a little over half the height of the other's. They
      are set by how tall each one actually draws rather than by the size asked
      for. */
-  .transport .ico { display: inline-block; font-size: 0.7rem; line-height: 1; }
-  .transport .end { font-size: 1.22rem; }
+  .transport .ico { display: block; margin: auto; fill: currentColor; }
+  .transport .ico[data-off] { display: none; }
   .transport .flip { transform: scaleX(-1); }
   /* No padding on the keys that hold a mark, so the mark's size cannot decide
      the key's: they are all the one width, whatever is drawn in them. */
@@ -663,7 +665,16 @@ const payload = {
   .count {
     margin: 0 0 0 auto; padding-left: clamp(4px, 1vw, 14px);
     font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.1em;
-    color: var(--ks-instrument-muted); font-variant-numeric: var(--f1-numeric);
+    color: var(--ks-instrument-muted); font-variant-numeric: tabular-nums;
+    white-space: nowrap; text-align: right;
+    min-width: calc((var(--digits, 3) * 2 + 3) * 1.1ch);
+  }
+  /* A phone: the row tightened so the count stays on it beside the speeds. */
+  @media (max-width: 420px) {
+    .transport { gap: 8px; }
+    .speeds button { padding: 0 8px; }
+    .buttons button:not(.play) { min-width: 30px; }
+    .count { padding-left: 0; letter-spacing: 0.04em; min-width: calc((var(--digits, 3) * 2 + 3) * 0.86ch); }
   }
 
   @media (max-width: 720px) {

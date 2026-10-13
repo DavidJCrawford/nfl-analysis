@@ -2376,7 +2376,8 @@ export function mountReplay(): void {
    *  running on. Pause, the end of the game and closing the dialog all come
    *  through here, so neither can be left behind. */
   function reflectPlaying(): void {
-    el.play.textContent = state.playing ? '❚❚' : '▶';
+    el.play.querySelector<SVGElement>('[data-glyph="play"]')?.toggleAttribute('data-off', state.playing);
+    el.play.querySelector<SVGElement>('[data-glyph="pause"]')?.toggleAttribute('data-off', !state.playing);
     el.play.setAttribute('aria-label', state.playing ? 'Pause' : 'Play');
     void keepAwake(state.playing);
   }
