@@ -14,7 +14,7 @@
  *  the field, which is the thing being watched. Everything the page shows is
  *  drawn from the Game; nothing here decides football. */
 import {
-  CONCEPTS, COVERAGE_LABEL, ELIGIBLE, FORMATIONS, GAP_Y, LANDMARK, MAN, ROUTE, ROUTES_FOR, RUNS,
+  CONCEPTS, COVERAGE_LABEL, ELIGIBLE, FORMATIONS, GAP_Y, HALF_WIDTH, LANDMARK, MAN, ROUTE, ROUTES_FOR, RUNS,
   type Coverage, type DefJob, type DefSlot, type Job, type OffSlot, type Zone,
 } from './kb';
 import { assignments, defAlign, defLineup, formation, offLineup, zoneSpot, type Result, type Spot } from './engine';
@@ -250,11 +250,110 @@ export async function mountPractice(): Promise<void> {
     requestAnimationFrame(step);
   }
 
+  // ── Between plays.
+  /** Everyone on the field, in field yards — x from the left goal line, y up
+   *  the screen from the middle — so the picture at the end of a play and
+   *  the one before the next can be put on one view, whichever way either
+   *  was facing. A man is known by his side and his card. */
+  interface Placed { X: number; Y: number; card: Card; side: Side; unit: 'off' | 'def'; }
+  interface Picture { dots: Map<string, Placed>; ball: Spot; los: number; fd: number | null; cx: number; }
+  const keyOf = (side: Side, c: Card) => `${side}:${c.id}`;
+
+  /** The last frame of what was just drawn. */
+  function lastPicture(): Picture | null {
+    const qd = queue[queue.length - 1];
+    if (!qd || !W) return null;
+    const { reel, side, q } = qd, dir = dirOf(side, q), f = reel.frames - 1;
+    const losAbs = dir === 1 ? reel.los : 100 - reel.los;
+    const dots = new Map<string, Placed>();
+    for (const a of reel.actors) {
+      const s = a.team === 'kick' ? side : other(side), k = keyOf(s, a.card);
+      if (!dots.has(k)) dots.set(k, { X: losAbs + dir * a.xy[f * 2]!, Y: dir * a.xy[f * 2 + 1]!, card: a.card, side: s, unit: a.team === 'kick' ? 'off' : 'def' });
+    }
+    return {
+      dots, ball: { x: losAbs + dir * reel.ball[f * 3]!, y: dir * reel.ball[f * 3 + 1]! }, los: losAbs,
+      fd: reel.togo !== null && reel.los + reel.togo < 100 ? losAbs + dir * reel.togo : null,
+      cx: R.view(W, H, reel.los, dir, camera ?? undefined, reel.posts ? 8 : 0).cx,
+    };
+  }
+  /** The picture before the next snap, as it stands now — taken afresh every
+   *  frame, so a call changed or a huddle broken on the way is walked to. */
+  function nextPicture(): Picture {
+    const sc = scene(), dir = game.dir, losAbs = dir === 1 ? game.los : 100 - game.los;
+    const dots = new Map<string, Placed>();
+    const put = (side: Side, unit: 'off' | 'def', cards: Partial<Record<string, Card>>, at: Partial<Record<string, Spot>>) => {
+      for (const [s, c] of Object.entries(cards)) {
+        const p = at[s]; if (!c || !p) continue;
+        const k = keyOf(side, c);
+        if (!dots.has(k)) dots.set(k, { X: losAbs + dir * p.x, Y: dir * p.y, card: c, side, unit });
+      }
+    };
+    put(other(sc.offSide), 'def', sc.D.cards, sc.D.at);
+    put(sc.offSide, 'off', sc.O.cards, sc.O.at);
+    return { dots, ball: { x: losAbs + dir * 0.3, y: dir * game.hashY }, los: losAbs,
+             fd: game.los + game.togo < 100 ? losAbs + dir * game.togo : null, cx: presnapView().cx };
+  }
+
+  /** From the end of one play to the start of the next, as the replay does
+   *  it: the two lines slide to their new spots, the camera with them, the
+   *  ball is carried in, the men who stay on walk to where they line up —
+   *  and when the units change, after a kick or a change of possession, the
+   *  men going off run off the top of the screen and their replacements run
+   *  on from it. */
+  let between: { from: Picture; t: number; dur: number } | null = null;
+  const OFF_FIELD = HALF_WIDTH + 6;    // beyond the top sideline, out of the picture
+  function walkOn(from: Picture | null): void {
+    between = null;
+    if (!from || stillness.matches) return;
+    const to = nextPicture();
+    let far = Math.abs(to.cx - from.cx), subs = false;
+    for (const [k, a] of from.dots) { const b = to.dots.get(k); if (b) far = Math.max(far, Math.hypot(b.X - a.X, b.Y - a.Y)); else subs = true; }
+    for (const k of to.dots.keys()) if (!from.dots.has(k)) subs = true;
+    between = { from, t: 0, dur: clamp(0.8 + far / 35, 1, 1.9) + (subs ? 0.7 : 0) };
+    let last = performance.now();
+    const step = (now: number) => {
+      if (!between) return;
+      between.t += Math.min(0.05, (now - last) / 1000); last = now;
+      if (between.t >= between.dur) { between = null; paint(); draw(); return; }
+      draw();
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function drawBetween(): void {
+    const { from, t, dur } = between!;
+    const to = nextPicture(), u = t / dur;
+    const mix = (a: number, b: number, k: number) => a + (b - a) * k;
+    const e = ease(u);
+    const v = R.view(W, H, 0, 1, mix(from.cx, to.cx, e));
+    R.drawField(g, v, lookFor(game.poss, game.dir));
+    const fd = from.fd !== null && to.fd !== null ? { x: mix(from.fd, to.fd, e), a: 1 }
+      : to.fd !== null ? { x: to.fd, a: e } : from.fd !== null ? { x: from.fd, a: 1 - e } : null;
+    R.drawLinesAt(g, v, mix(from.los, to.los, e), fd?.x ?? null, gold, fd?.a ?? 0);
+    // Those going off go first, those coming on follow them, and those who
+    // stay take the whole of it.
+    const goOff = ease(u / 0.6), comeOn = ease((u - 0.4) / 0.6);
+    const shown: Placed[] = [];
+    for (const [k, a] of from.dots) {
+      const b = to.dots.get(k);
+      if (b) shown.push({ ...b, X: mix(a.X, b.X, e), Y: mix(a.Y, b.Y, e) });
+      else if (goOff < 1) shown.push({ ...a, X: mix(a.X, a.X + (to.los - from.los) * 0.3, goOff), Y: mix(a.Y, OFF_FIELD, goOff) });
+    }
+    for (const [k, b] of to.dots) if (!from.dots.has(k) && comeOn > 0) shown.push({ ...b, Y: mix(OFF_FIELD, b.Y, comeOn) });
+    // Unlabelled on the move: a label goes behind a man by which way his side
+    // is facing, and that can change under him.
+    for (const unit of ['def', 'off'] as const) for (const p of shown) if (p.unit === unit)
+      R.drawDot(g, v, { ...dot(p.card, { x: p.X, y: p.Y }, p.side, unit, null), pos: '' }, look);
+    R.drawBall(g, v, { x: mix(from.ball.x, to.ball.x, e), y: mix(from.ball.y, to.ball.y, e) }, 0);
+  }
+
   // ── Drawing.
   function draw(): void {
     if (!W) return;
     const cur = queue[Math.min(qi, queue.length - 1)];
     if (cur && (mode === 'play' || mode === 'result')) { drawReel(cur); return; }
+    if (between && game) { drawBetween(); return; }
     const v = presnapView();
     R.drawField(g, v, game ? lookFor(game.poss, game.dir) : lookFor('user', 1));
     if (!game || mode === 'intro' || mode === 'loading' || mode === 'error') return;
@@ -384,6 +483,7 @@ export async function mountPractice(): Promise<void> {
     // break between them (next()).
     const k = list.findIndex((x) => x.q !== list[0]!.q);
     if (k > 0) { afterBreak = list.slice(k); list = list.slice(0, k); }
+    between = null;
     queue = list; qi = 0; mt = 0; shownBeats = 0;
     onFirstDone = first; onAllDone = all;
     if (!list.length) { onFirstDone = onAllDone = null; first(); all(); return; }
@@ -564,7 +664,7 @@ export async function mountPractice(): Promise<void> {
       ], setPlay, (concept ?? run)?.note),
     );
     const kick = game.canKickEarly ? section('', button(`Kick a ${100 - game.los + 17}-yard field goal now`, kickNow, 'pr-btn pr-wide')) : null;
-    const go = !lined ? button('Line up', lineUp, 'pr-go') : button('Snap', doSnap, 'pr-go', lineT < 1);
+    const go = !lined ? button('Line up', lineUp, 'pr-go') : button('Snap', doSnap, 'pr-go', lineT < 1 || !!between);
     return [scoutOffence(), calls, playerPanel(), ...(kick ? [kick] : []), actions(button('Reset play', resetPlay), go)];
   }
 
@@ -581,7 +681,7 @@ export async function mountPractice(): Promise<void> {
         (v) => { dCall = { ...dCall, rushers: Number(v) }; refresh(); },
         `Across the league, ${dCall.rushers} rushing get pressure on ${pct(L.pressure.byRushers[String(dCall.rushers)]?.pressure ?? 0.26)} of dropbacks.`),
     );
-    return [scoutDefence(), calls, playerPanel(), actions(button('Reset play', resetPlay), button('Snap', doSnap, 'pr-go'))];
+    return [scoutDefence(), calls, playerPanel(), actions(button('Reset play', resetPlay), button('Snap', doSnap, 'pr-go', !!between))];
   }
 
   /** What the user can know before the snap: the other side's season, in
@@ -826,7 +926,7 @@ export async function mountPractice(): Promise<void> {
 
   // ── Picking players on the field.
   function hits(): Hit[] {
-    if (!game || mode !== 'call') return [];
+    if (!game || mode !== 'call' || between) return [];
     const sc = scene();
     const out: Hit[] = [];
     for (const [s, c] of Object.entries(sc.O.cards) as [OffSlot, Card][]) if (sc.O.at[s]) out.push({ key: `o:${s}`, side: sc.offSide, card: c, at: sc.O.at[s]! });
@@ -918,6 +1018,7 @@ export async function mountPractice(): Promise<void> {
     if (mode !== 'call') return;
     if (game.userOnOffence && !lined) { lineUp(); return; }
     if (game.userOnOffence && lineT < 1) return;
+    if (between) return;
     hideTip();
     selected = null;
     const side = game.poss, q = game.quarter, los = game.los;
@@ -961,9 +1062,13 @@ export async function mountPractice(): Promise<void> {
   }
 
   function next(): void {
+    const pic = lastPicture();
     queue = []; qi = 0; camera = null; result = null;
     if (game.phase === 'over') { gameOver(); return; }
+    // A new quarter is a change of ends, and the break covers it: no walk
+    // from one end of the field to the other.
     if (game.quarter !== shownQ) { quarterBreak(); return; }
+    walkOn(pic);
     if (game.phase === 'fourth') {
       if (game.poss === 'user') { mode = 'fourth'; paint(); draw(); return; }
       const c = game.cpuFourth();
@@ -976,6 +1081,7 @@ export async function mountPractice(): Promise<void> {
   }
 
   function toCall(): void {
+    if (queue.length && !between) walkOn(lastPicture());
     queue = []; qi = 0; camera = null;
     if (game.phase === 'over') { gameOver(); return; }
     shownQ = game.quarter;

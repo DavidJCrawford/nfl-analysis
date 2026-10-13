@@ -389,6 +389,14 @@ other way. At the half it comes before the second-half kickoff is drawn.
   so a kick comes down to just over the bar as it reaches them, aimed so it
   is drawn between the uprights when good and clear of them when not, and
   the camera may run past the end line to see it land.
+- **Between plays** the picture is not cut, as the replay's is not: the
+  line of scrimmage and the line to gain slide to their new spots (the gold
+  one fading in or out when there is none, after a kick or goal to go), the
+  camera and the ball with them, and the men who stay on walk from where the
+  play left them to where they line up. When the units change — after a kick,
+  or a change of possession — the men going off run off the top of the screen
+  and their replacements run on from it. A new quarter is cut, under the
+  break, since the ends change. Off for anyone who asks for less motion.
 - **After the play** the panel gives the result, the other side's call, and
   the arithmetic that decided it.
 - **Fourth down** offers go, kick or punt, with the league's go-rate and the

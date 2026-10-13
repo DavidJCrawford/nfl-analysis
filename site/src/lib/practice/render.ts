@@ -151,15 +151,21 @@ export function drawField(g: CanvasRenderingContext2D, v: View, look: Look): voi
 /** The line of scrimmage, and the line to gain where there is one short of
  *  the goal line. */
 export function drawLines(g: CanvasRenderingContext2D, v: View, togo: number, los: number, gold: string): void {
+  drawLinesAt(g, v, v.losAbs, los + togo < 100 ? v.losAbs + v.dir * togo : null, gold);
+}
+/** The two lines at field yards of their own — for the moment between plays
+ *  when they are on the move — the line to gain as faint as `fdAlpha` says
+ *  while it comes or goes. */
+export function drawLinesAt(g: CanvasRenderingContext2D, v: View, losX: number, fdX: number | null, gold: string, fdAlpha = 1): void {
   const fh = FIELD_W * v.scale;
-  const x = ax(v, v.losAbs);
+  const x = ax(v, losX);
   g.strokeStyle = 'oklch(72% 0.12 245 / 0.85)';
   g.lineWidth = 2;
   g.beginPath(); g.moveTo(x, v.top); g.lineTo(x, v.top + fh); g.stroke();
-  if (los + togo < 100) {
-    const fx = ax(v, v.losAbs + v.dir * togo);
+  if (fdX !== null && fdAlpha > 0) {
+    const fx = ax(v, fdX);
     g.strokeStyle = gold;
-    g.globalAlpha = 0.85;
+    g.globalAlpha = 0.85 * fdAlpha;
     g.beginPath(); g.moveTo(fx, v.top); g.lineTo(fx, v.top + fh); g.stroke();
     g.globalAlpha = 1;
   }
