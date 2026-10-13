@@ -306,10 +306,12 @@ import { u } from '@lib/url';
     border-inline: 2px solid oklch(100% 0 0 / 0.5);
     background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), oklch(100% 0 0 / 0.14) calc(10% - 1px) 10%);
   }
-  .pr-arrow { position: relative; width: 70%; height: 6px; border-radius: 3px; background: var(--you); }
+  /* White, as the plays are drawn: a club's colour on the turf can all but vanish. */
+  .pr-ends { --chalk: oklch(97% 0 0); }
+  .pr-arrow { position: relative; width: 70%; height: 6px; border-radius: 3px; background: var(--chalk); }
   .pr-arrow::after {
     content: ''; position: absolute; right: -10px; top: 50%; translate: 0 -50%;
-    border-left: 14px solid var(--you); border-block: 10px solid transparent;
+    border-left: 14px solid var(--chalk); border-block: 10px solid transparent;
   }
   .pr-ends[data-dir='left'] .pr-arrow { scale: -1 1; }
   .pr-ends-label { font-size: var(--ks-type-eyebrow-size); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ks-instrument-text); }

@@ -1029,7 +1029,6 @@ export async function mountPractice(): Promise<void> {
     // an arrow the way the user now attacks.
     const ends = el('div', 'pr-ends');
     ends.dataset.dir = d === 1 ? 'right' : 'left';
-    ends.style.setProperty('--you', colourOf('user'));
     for (const s of d === 1 ? (['user', 'cpu'] as const) : (['cpu', 'user'] as const)) {
       const ez = el('span', 'pr-ez'), img = el('img');
       img.src = u(`/logos/${team(s).team}.png`); img.alt = ''; ez.append(img);
