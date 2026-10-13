@@ -423,6 +423,7 @@ export function mountReplay(): void {
   }
 
   function resetLines(): void {
+    cam.live = false;
     losLine.live = fdLine.live = false;
     losLine.grow = fdLine.grow = 0;
     unitEase.off.live = unitEase.def.live = false;
@@ -464,6 +465,18 @@ export function mountReplay(): void {
     let h = w / aspect + pad * 2;
     if (h > availH) { h = availH; w = (h - pad * 2) * aspect; }
 
+    // On a phone the whole field is a strip a few pixels a yard, with the
+    // height it could have used left empty under it. There the camera comes
+    // in, as the practice field's does: the field as tall as the room allows,
+    // sixty yards of it across at the least, following the ball. Wherever the
+    // whole field is big enough to read, it stays whole.
+    const whole = w / FIELD_YARDS;
+    const close = Math.min((availH - pad * 2) / FIELD_WIDTH, availW / FOCUS_YARDS);
+    const wasFocus = focus;
+    focus = availW <= 720 && close > whole * 1.25;
+    if (focus) { w = availW; h = Math.min(availH, FIELD_WIDTH * close + pad * 2); }
+    if (focus !== wasFocus) cam.live = false;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     field.width = Math.round(w * dpr);
     field.height = Math.round(h * dpr);
@@ -471,8 +484,32 @@ export function mountReplay(): void {
     field.style.height = `${Math.round(h)}px`;
     fx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    box = { x: 0, y: pad, w, h: h - pad * 2, scale: w / FIELD_YARDS };
+    box = { x: 0, y: pad, w, h: h - pad * 2, scale: focus ? (h - pad * 2) / FIELD_WIDTH : w / FIELD_YARDS };
   }
+
+  /** The camera, for a narrow screen (`focus`): where the middle of the view
+   *  is, in yards from the left-hand end line as drawn, eased after the ball
+   *  on the lines' own clock — a little slower, so it trails rather than
+   *  jerks. `live` false takes up its spot at once: the first picture, or the
+   *  field turned over at the end of a quarter. */
+  const FOCUS_YARDS = 60;
+  const CAM_TAU = 220;
+  let focus = false;
+  const cam = { x: 60, live: false, mirrored: false };
+  /** The left edge of the view, in the same yards. */
+  let camLeft = 0;
+  function stepCam(target: number, mirror: boolean, dt: number): boolean {
+    if (!focus) return false;
+    if (reduced.matches || !cam.live || cam.mirrored !== mirror) { cam.live = true; cam.mirrored = mirror; cam.x = target; return false; }
+    const dx = target - cam.x;
+    if (Math.abs(dx) <= 0.02) { cam.x = target; return false; }
+    cam.x += dx * (1 - Math.exp(-dt / CAM_TAU));
+    return true;
+  }
+  /** Kept inside the canvas, as a badge or a label is — unless, with the
+   *  camera in close, it is off the picture altogether: pinned to the edge it
+   *  would stand at a yard it is not at. */
+  const keepIn = (x: number, lo: number, hi: number) => (focus && (x < 0 || x > box.w) ? x : clamp(x, lo, hi));
 
   /** Which way round the field is drawn. Sides change ends at the end of every
    *  quarter, so everything on the field turns over with them: the ball, the
@@ -535,8 +572,9 @@ export function mountReplay(): void {
   }
 
   let mirrored = false;
-  const px = (fxYard: number) =>
-    box.x + (mirrored ? 110 - fxYard : fxYard + 10) * box.scale;
+  /** A yard line, as yards from the left-hand end line as drawn. */
+  const drawnYard = (fxYard: number, mirror = mirrored) => (mirror ? 110 - fxYard : fxYard + 10);
+  const px = (fxYard: number) => box.x + (drawnYard(fxYard) - camLeft) * box.scale;
   /** A direction along the field, as a direction across the screen. */
   const onScreen = (d: number) => (mirrored ? -d : d);
   const py = (frac: number) => box.y + frac * box.h;
@@ -655,7 +693,7 @@ export function mountReplay(): void {
       fx.save();
       fx.globalAlpha = 0.4;
       fx.translate(ex, py(0.5));
-      fx.rotate(ex > box.w / 2 ? Math.PI / 2 : -Math.PI / 2);
+      fx.rotate(ex > px(50) ? Math.PI / 2 : -Math.PI / 2);
       fx.drawImage(c.img, ix, iy, iw, ih, -along / 2, -across / 2, along, across);
       fx.restore();
     }
@@ -1216,7 +1254,7 @@ export function mountReplay(): void {
 
     // Kept inside the canvas: a kicker standing eight yards behind his own goal
     // line would otherwise take his badge off the left edge.
-    const cx = clamp(px(m.x), w / 2 + 2, box.w - w / 2 - 2);
+    const cx = keepIn(px(m.x), w / 2 + 2, box.w - w / 2 - 2);
     const span = { a: cx - w / 2 - 4, b: cx + w / 2 + 4 };
     let row = 0;
     while ((badgeRows[row] ??= []).some((o) => span.a < o.b && span.b > o.a)) row += 1;
@@ -1228,7 +1266,7 @@ export function mountReplay(): void {
     // A stem down to the ball's line, so the badge reads as being *at* a yard
     // line rather than floating over the field. In the team's colour it
     // disappeared against the dark field; it is drawn in ink and tinted.
-    const stemX = Math.round(clamp(px(m.x), 1, box.w - 1)) + 0.5;
+    const stemX = Math.round(keepIn(px(m.x), 1, box.w - 1)) + 0.5;
     fx.strokeStyle = 'oklch(100% 0 0 / 0.45)';
     fx.lineWidth = 1;
     fx.beginPath();
@@ -1325,7 +1363,7 @@ export function mountReplay(): void {
       // ball stopped put it on the wrong side of every carry that finished
       // past the defence's own alignment.
       const gap = w / 2 + clamp(box.h * 0.045, 5, 11) * 1.45 + 7;
-      const cx = clamp(px(at) + (u.close ? onScreen(u.close.side) * t : 0) * gap,
+      const cx = keepIn(px(at) + (u.close ? onScreen(u.close.side) * t : 0) * gap,
                        w / 2 + 4, box.w - w / 2 - 4);
       // Far enough to clear the field's top edge entirely at dy = 1.
       const top = Math.round(lane - u.dy * (lane - box.y + h + 8));
@@ -1432,8 +1470,8 @@ export function mountReplay(): void {
     // Only at a goal line on a narrow screen is there not room for it; there
     // it gives up the alignment rather than running off the edge half drawn.
     const ax = Math.round(sd > 0
-      ? clamp(px(losLine.x), 2, Math.max(2, box.w - reach - 2))
-      : clamp(px(losLine.x), Math.min(box.w - 2, reach + 2), box.w - 2));
+      ? keepIn(px(losLine.x), 2, Math.max(2, box.w - reach - 2))
+      : keepIn(px(losLine.x), Math.min(box.w - 2, reach + 2), box.w - 2));
     // Set by the ink rather than the advance box: what has to meet the line is
     // the letter, not the space the letter is sitting in. In this face that is
     // a correction of about half a pixel, so it changes nothing to look at —
@@ -1549,6 +1587,9 @@ export function mountReplay(): void {
     // way round and the even ones the other. Decided once, here, so that every
     // part of the picture agrees about which way it is facing.
     mirrored = ((data.frames[state.i]?.q ?? 1) % 2) === 0;
+    if (focus && !cam.live) stepCam(drawnYard(now.ball), mirrored, 0);
+    const visible = box.w / box.scale;
+    camLeft = focus ? clamp(cam.x - visible / 2, 0, Math.max(0, FIELD_YARDS - visible)) : 0;
     drawField();
     drawPlay(data.frames[state.i]!, now);
     drawStrip(now.ball);
@@ -2403,6 +2444,8 @@ export function mountReplay(): void {
         const target = shot.units.find((u) => u.unit === side)?.at ?? null;
         settling = stepUnit(unitEase[side], target, scaled) || settling;
       }
+      const mirror = ((data.frames[state.i]?.q ?? 1) % 2) === 0;
+      settling = stepCam(drawnYard(shot.ball, mirror), mirror, scaled) || settling;
     }
     render(shot);
 
