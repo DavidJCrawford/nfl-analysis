@@ -355,7 +355,18 @@ user reads or chooses is in the panel.
   a real quarterback can read before the snap) and its season in the numbers
   the engine uses — and then the user's calls, as dropdowns: Formation and
   Play on offence, Coverage and Rushers on defence, each with a line saying
-  what the choice is.
+  what the choice is. Each snap they open on the league's most common call
+  for the situation — the computer's own draw (§9) with the dice taken out:
+  the commonest coverage for the down, distance and red zone and its
+  commonest rush; on offence, a pass or a run by the measured pass rate, from
+  the gun or under centre by the measured shotgun rate, and the concept that
+  looks most like what the league threw there.
+- **On offence the defence waits in its huddle** while the user calls the
+  play, ten yards off the ball. **Line up** sends it jogging to its spots —
+  set against the formation the user has chosen — and only then does it show
+  its shell and the button become **Snap**. A shift or an audible after that
+  is still allowed, and the defence realigns to it. On defence there is no
+  such step: the offence lines up first on a Sunday too.
 - **A player** tapped on the field goes into the panel: his season, and, if
   he is the user's, his job — a Route dropdown and "make him the first read"
   for a receiver, a Job dropdown (rush, man on any eligible, any zone) for a

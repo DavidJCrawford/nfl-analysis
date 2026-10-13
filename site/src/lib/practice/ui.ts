@@ -18,7 +18,7 @@ import {
   type Coverage, type DefJob, type DefSlot, type Job, type OffSlot, type Zone,
 } from './kb';
 import { assignments, defAlign, defLineup, formation, offLineup, zoneSpot, type Result, type Spot } from './engine';
-import { fgMake, passCall, runCall } from './ai';
+import { fgMake, passCall, runCall, usualDefCall, usualOffCall } from './ai';
 import { Game, describe, dirOf, type Event, type Side } from './game';
 import { choreograph, routePath, FPS } from './choreo';
 import { kickoffReel, placeKickReel, playReel, puntReel, type Reel } from './specials';
@@ -139,6 +139,12 @@ export async function mountPractice(): Promise<void> {
    *  where he put them as the ball moves across the hashes. */
   let movedRel: Partial<Record<OffSlot, Spot>> = {};
   let dCall: DefCall = { coverage: 'COVER_3', rushers: 4 };
+  /** On offence, the defence waits in its huddle while the user calls the
+   *  play, and lines up only when the user does — the order it happens in on
+   *  a Sunday, and the reason the shell can be read only once both sides are
+   *  set. `lineT` runs 0 to 1 as they jog out to their spots. */
+  let lined = false;
+  let lineT = 1;
   let selected: string | null = null;
   let hover: string | null = null;
 
@@ -197,7 +203,8 @@ export async function mountPractice(): Promise<void> {
       const f = formation(oc.formation);
       const O = offLineup(user, f, oc.moved, hashY);
       const cards = defLineup(cpu);
-      return { offSide: 'user', O, D: { cards, at: defAlign(cards, (cpuCall as DefCall).coverage, O.at, hashY, f.under, 100 - game.los + 9, (cpuCall as DefCall).press) }, jobs: null, oc };
+      const set = defAlign(cards, (cpuCall as DefCall).coverage, O.at, hashY, f.under, 100 - game.los + 9, (cpuCall as DefCall).press);
+      return { offSide: 'user', O, D: { cards, at: lined && lineT >= 1 ? set : jogOut(huddle(cards, hashY), set) }, jobs: null, oc };
     }
     const oc = cpuCall as OffCall;
     const f = formation(oc.formation);
@@ -206,6 +213,41 @@ export async function mountPractice(): Promise<void> {
     const eligible = ELIGIBLE.filter((s) => O.cards[s]);
     const at = defAlign(cards, dCall.coverage, O.at, hashY, f.under, 100 - game.los + 9, dCall.press);
     return { offSide: 'cpu', O, D: { cards, at }, jobs: assignments(dCall, cards, eligible, true, at), oc: null };
+  }
+
+  /** The defensive huddle: a ring ten yards off the ball, a step in from
+   *  the hash toward the middle of the field. */
+  function huddle(cards: Partial<Record<DefSlot, Card>>, hashY: number): Partial<Record<DefSlot, Spot>> {
+    const slots = Object.keys(cards) as DefSlot[], out: Partial<Record<DefSlot, Spot>> = {};
+    const cx = Math.min(10, 100 - game.los + 6), cy = hashY * 0.5;
+    slots.forEach((s, i) => { const a = (i / slots.length) * 2 * Math.PI; out[s] = { x: cx + 3 * Math.cos(a), y: cy + 3 * Math.sin(a) }; });
+    return out;
+  }
+  /** Part-way from the huddle to the alignment, each man leaving a beat after
+   *  the one before so they do not move as one block. */
+  function jogOut(from: Partial<Record<DefSlot, Spot>>, to: Partial<Record<DefSlot, Spot>>): Partial<Record<DefSlot, Spot>> {
+    if (!lined) return from;
+    const out: Partial<Record<DefSlot, Spot>> = {};
+    (Object.keys(to) as DefSlot[]).forEach((s, i) => {
+      const a = from[s] ?? to[s]!, b = to[s]!, t = ease((lineT - i * 0.025) / 0.72);
+      out[s] = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    });
+    return out;
+  }
+  function lineUp(): void {
+    if (mode !== 'call' || !game.userOnOffence || lined) return;
+    hideTip();
+    lined = true; lineT = stillness.matches ? 1 : 0;
+    paint();
+    if (lineT >= 1) { draw(); return; }
+    let t0 = performance.now();
+    const step = (now: number) => {
+      if (mode !== 'call' || !lined) return;
+      lineT = Math.min(1, lineT + (now - t0) / 1100); t0 = now;
+      draw();
+      if (lineT < 1) requestAnimationFrame(step); else paint();
+    };
+    requestAnimationFrame(step);
   }
 
   // ── Drawing.
@@ -262,7 +304,10 @@ export async function mountPractice(): Promise<void> {
       }
     }
     for (const [s, c] of Object.entries(sc.D.cards) as [DefSlot, Card][]) {
-      const at = sc.D.at[s]; if (at) R.drawDot(g, v, dot(c, at, other(sc.offSide), 'def', `d:${s}`), look);
+      // In the huddle, and on the way out of it, the positions are not
+      // written: eleven labels in a ring is a smudge.
+      const settled = !(sc.offSide === 'user' && (!lined || lineT < 1));
+      const at = sc.D.at[s]; if (at) R.drawDot(g, v, { ...dot(c, at, other(sc.offSide), 'def', `d:${s}`), ...(settled ? {} : { pos: '' }) }, look);
     }
     for (const [s, c] of Object.entries(sc.O.cards) as [OffSlot, Card][]) {
       const at = sc.O.at[s]; if (at) R.drawDot(g, v, dot(c, at, sc.offSide, 'off', `o:${s}`), look);
@@ -526,7 +571,8 @@ export async function mountPractice(): Promise<void> {
       ], setPlay, (concept ?? run)?.note),
     );
     const kick = game.canKickEarly ? section('', button(`Kick a ${100 - game.los + 17}-yard field goal now`, kickNow, 'pr-btn pr-wide')) : null;
-    return [scoutOffence(), calls, playerPanel(), ...(kick ? [kick] : []), actions(button('Reset play', resetPlay), button('Snap', doSnap, 'pr-go'))];
+    const go = !lined ? button('Line up', lineUp, 'pr-go') : button('Snap', doSnap, 'pr-go', lineT < 1);
+    return [scoutOffence(), calls, playerPanel(), ...(kick ? [kick] : []), actions(button('Reset play', resetPlay), go)];
   }
 
   // Defence.
@@ -553,7 +599,9 @@ export async function mountPractice(): Promise<void> {
     const twoHigh = ['2_MAN', 'COVER_2', 'COVER_4', 'COVER_6'].includes(dc.coverage);
     return section('pr-scout',
       el('p', 'pr-eyebrow', `${cpu.nick} defence`),
-      el('p', 'pr-lede', `They show ${twoHigh ? 'two deep safeties' : dc.coverage === 'COVER_0' ? 'nobody deep' : 'one deep safety'}.`),
+      el('p', 'pr-lede', !lined ? 'In their huddle. They line up when you do.'
+        : lineT < 1 ? 'Lining up.'
+        : `They show ${twoHigh ? 'two deep safeties' : dc.coverage === 'COVER_0' ? 'nobody deep' : 'one deep safety'}.`),
       el('p', 'pr-note', `They allow ${x2(d.cmp)} the league’s completion rate, sack ${x2(d.sack)} as often, give up ${x2(d.ypc)} its yards a carry, and blitz ${pct(cpu.rates.blitz)} of the time.`));
   }
   function scoutDefence(): HTMLElement {
@@ -872,6 +920,8 @@ export async function mountPractice(): Promise<void> {
   let lastTogo = 10;
   function doSnap(): void {
     if (mode !== 'call') return;
+    if (game.userOnOffence && !lined) { lineUp(); return; }
+    if (game.userOnOffence && lineT < 1) return;
     hideTip();
     selected = null;
     const side = game.poss, q = game.quarter, los = game.los;
@@ -931,7 +981,15 @@ export async function mountPractice(): Promise<void> {
   function toCall(): void {
     queue = []; qi = 0; camera = null;
     if (game.phase === 'over') { gameOver(); return; }
-    // The user's calls carry over from snap to snap, edits and all.
+    // Each snap opens on the league's most common call for the down and
+    // distance, and on offence with the defence still in its huddle.
+    const sit = game.situation();
+    if (game.userOnOffence) {
+      const usual = usualOffCall(sit, L, quarterMin * 60);
+      fid = usual.fid; playId = usual.playId; movedRel = {};
+      oCall = RUNS.some((r) => r.id === playId) ? runCall(playId, fid) : passCall(playId, fid);
+    } else dCall = usualDefCall(sit, L);
+    selected = null; lined = false; lineT = 1;
     mode = 'call';
     paint(); draw();
   }

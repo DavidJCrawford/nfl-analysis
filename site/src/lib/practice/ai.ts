@@ -86,9 +86,20 @@ export function offCall(sit: Situation, L: League, team: TeamDoc, quarterLen: nu
   const gun = rand() < row.shotgun;
   const fid = gun ? pick(rand, [['gun-trips', 0.4], ['gun-doubles', 0.4], ['empty', 0.08], ['pistol', 0.12]])
                   : pick(rand, [['singleback', 0.7], ['i-form', 0.3]]);
+  const ws = conceptWeights(sit, row, fid, gun);
+  const c = pick(rand, ws);
+  const slots = new Set(formation(fid).align.map((a) => a.slot));
+  const jobs = Object.fromEntries(Object.entries(c.jobs).filter(([s]) => slots.has(s as OffSlot))) as OffCall['jobs'];
+  return { formation: fid, playId: c.id, kind: 'pass', jobs, reads: c.reads.filter((s) => slots.has(s)), playAction: !!c.playAction };
+}
+
+/** How likely each concept is to be called from this formation in this
+ *  situation: the concept whose routes look most like what the league threw
+ *  there comes first. */
+function conceptWeights(sit: Situation, row: League['calls'][string], fid: string, gun: boolean): [typeof CONCEPTS[number], number][] {
   const f = formation(fid);
   const slots = new Set(f.align.map((a) => a.slot));
-  const ws = CONCEPTS.map((c) => {
+  return CONCEPTS.map((c) => {
     const routes = Object.entries(c.jobs).filter(([s, j]) => slots.has(s as OffSlot) && j !== 'BLOCK').map(([, j]) => j as keyof typeof ROUTE);
     let w = routes.reduce((n, r) => n + (row.routes[r] ?? 0), 0) / Math.max(1, routes.length);
     if (c.playAction) w *= gun ? 0.3 : 2.2;
@@ -103,10 +114,33 @@ export function offCall(sit: Situation, L: League, team: TeamDoc, quarterLen: nu
     if (100 - sit.los <= 12 && (c.id === 'verts' || c.id === 'pa-shot')) w *= 0.3;
     return [c, w] as [typeof c, number];
   });
-  const c = pick(rand, ws);
-  const jobs = Object.fromEntries(Object.entries(c.jobs).filter(([s]) => slots.has(s as OffSlot))) as OffCall['jobs'];
-  return { formation: fid, playId: c.id, kind: 'pass', jobs, reads: c.reads.filter((s) => slots.has(s)), playAction: !!c.playAction };
 }
+
+// ── The user's starting calls ────────────────────────────────────────────────
+// What the dropdowns open on for each snap: the league's most common choice in
+// the situation — the computer's own draw with the dice taken out. The league's
+// and not the user's club's, so it reads as "what most teams do here".
+
+const commonest = <T>(weighted: [T, number][]): T => weighted.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+
+export function usualDefCall(sit: Situation, L: League): DefCall {
+  const coverage = commonest(Object.entries(L.cover[sitKey(sit, L.cover)]!.mix) as [Coverage, number][]);
+  const rushers = Number(commonest(Object.entries(L.coverRush[coverage])));
+  return { coverage, rushers: clamp(rushers, coverage === 'COVER_0' ? 6 : 3, 6) };
+}
+
+export function usualOffCall(sit: Situation, L: League, quarterLen: number): { fid: string; playId: string } {
+  const row = L.calls[sitKey(sit, L.calls)]!;
+  const gun = row.shotgun >= 0.5;
+  if (passRate(sit, L, LEAGUE_LEAN, quarterLen) < 0.5) {
+    const short = sit.togo <= 2 || 100 - sit.los <= 5;
+    const gap = commonest(GAPS.map((g) => [g, L.run.gaps[g].share] as [Gap, number]));
+    return { fid: short ? 'singleback' : gun ? 'gun-doubles' : 'singleback', playId: RUN_FOR_GAP[gap] };
+  }
+  const fid = gun ? 'gun-doubles' : 'singleback';
+  return { fid, playId: commonest(conceptWeights(sit, row, fid, gun)).id };
+}
+const LEAGUE_LEAN = { rates: { passLean: 1 } } as TeamDoc;
 
 export function runCall(id: string, fid: string): OffCall {
   const r = RUNS.find((x) => x.id === id) ?? RUNS[0]!;
