@@ -284,11 +284,53 @@ export async function mountPractice(): Promise<void> {
     R.drawLines(g, v, reel.togo ?? 100, reel.los, gold);
     const f = clamp(Math.floor(mt * FPS), 0, reel.frames - 1);
     const downed = f >= reel.whistle ? reel.downed : undefined;
+    const shake = f < reel.whistle ? jostle(reel, f) : null;
     reel.actors.forEach((a, i) => {
       const s = a.team === 'kick' ? side : other(side);
-      R.drawDot(g, v, dot(a.card, { x: a.xy[f * 2]!, y: a.xy[f * 2 + 1]! }, s, a.team === 'kick' ? 'off' : 'def', null, { down: downed === i }), look);
+      const at = { x: a.xy[f * 2]! + (shake?.[i * 2] ?? 0), y: a.xy[f * 2 + 1]! + (shake?.[i * 2 + 1] ?? 0) };
+      R.drawDot(g, v, dot(a.card, at, s, a.team === 'kick' ? 'off' : 'def', null, { down: downed === i }), look);
     });
     R.drawBall(g, v, { x: reel.ball[f * 3]!, y: reel.ball[f * 3 + 1]! }, reel.ball[f * 3 + 2]!);
+  }
+
+  /** The struggle at the point of contact, drawn and nothing more: two men
+   *  from either side within arm's length of each other and hardly moving are
+   *  locked up, and the pair sways together — pushing and giving along the
+   *  line between them, a little side to side, the gap between them breathing
+   *  as one leans in — each pair to its own rhythm. The simulation has them
+   *  standing still against each other a yard and a half apart, which is what
+   *  the result needs and not what a block looks like. It eases in as they
+   *  close and slow, so nothing jumps. Off for anyone who has asked for less
+   *  motion. */
+  const stillness = matchMedia('(prefers-reduced-motion: reduce)');
+  const ease = (t: number) => { const u = clamp(t, 0, 1); return u * u * (3 - 2 * u); };
+  function jostle(reel: Reel, f: number): Float32Array | null {
+    if (stillness.matches || f < 1) return null;
+    const n = reel.actors.length, out = new Float32Array(n * 2), wt = new Float32Array(n);
+    const px = (i: number) => reel.actors[i]!.xy[f * 2]!, py = (i: number) => reel.actors[i]!.xy[f * 2 + 1]!;
+    const bx = reel.ball[f * 3]!, by = reel.ball[f * 3 + 1]!;
+    const calm = reel.actors.map((a, i) => Math.hypot(px(i) - bx, py(i) - by) < 0.8 ? 0   // not the man with the ball
+      : ease((3 - Math.hypot(px(i) - a.xy[f * 2 - 2]!, py(i) - a.xy[f * 2 - 1]!) * FPS) / 1.5));
+    const tau = 2 * Math.PI * mt;
+    for (let i = 0; i < n; i++) {
+      if (reel.actors[i]!.team !== 'kick' || !calm[i]) continue;
+      for (let j = 0; j < n; j++) {
+        if (reel.actors[j]!.team === 'kick' || !calm[j]) continue;
+        const dx = px(j) - px(i), dy = py(j) - py(i), d = Math.hypot(dx, dy);
+        const w = ease((2 - d) / 0.5) * Math.min(calm[i]!, calm[j]!);
+        if (!w || d < 1e-3) continue;
+        const ux = dx / d, uy = dy / d, ph = ((i * 7 + j * 13) % 17) / 17 * 2 * Math.PI;
+        const push = 0.32 * Math.sin(tau * (1.9 + (i % 3) * 0.3) + ph);
+        const sway = 0.16 * Math.sin(tau * (3.1 + (j % 3) * 0.4) + ph * 1.7);
+        const lean = 0.08 * Math.sin(tau * (4.3 + ((i + j) % 3) * 0.5) + ph * 2.3);
+        const ox = ux * push - uy * sway, oy = uy * push + ux * sway;
+        out[i * 2] += w * (ox + ux * lean); out[i * 2 + 1] += w * (oy + uy * lean);
+        out[j * 2] += w * (ox - ux * lean); out[j * 2 + 1] += w * (oy - uy * lean);
+        wt[i] += w; wt[j] += w;
+      }
+    }
+    for (let i = 0; i < n; i++) if (wt[i]! > 1) { out[i * 2] /= wt[i]!; out[i * 2 + 1] /= wt[i]!; }
+    return out;
   }
 
   // ── The reels: played in order, the camera following the ball.
