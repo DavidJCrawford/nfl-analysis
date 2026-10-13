@@ -70,6 +70,7 @@ export async function mountPractice(): Promise<void> {
   const tip = $<HTMLElement>(root, '[data-tip]');
   const beat = $<HTMLElement>(root, '[data-beat]');
   const close = $<HTMLAnchorElement>(root, '[data-close]');
+  const breakBox = $<HTMLDialogElement>(root, '[data-break]');
 
   const qs = new URLSearchParams(location.search);
   const mine = (qs.get('team') ?? '').toUpperCase();
@@ -324,7 +325,7 @@ export async function mountPractice(): Promise<void> {
   function drawReel(qd: Queued): void {
     const { reel, side, q } = qd;
     const dir = dirOf(side, q);
-    const v = R.view(W, H, reel.los, dir, camera ?? undefined);
+    const v = R.view(W, H, reel.los, dir, camera ?? undefined, reel.posts ? 8 : 0);
     R.drawField(g, v, lookFor(side, dir, !!reel.posts));
     R.drawLines(g, v, reel.togo ?? 100, reel.los, gold);
     const f = clamp(Math.floor(mt * FPS), 0, reel.frames - 1);
@@ -380,6 +381,10 @@ export async function mountPractice(): Promise<void> {
 
   // ── The reels: played in order, the camera following the ball.
   function play(list: Queued[], first: () => void, all: () => void): void {
+    // A kick in the next quarter — the second-half kickoff — waits for the
+    // break between them (next()).
+    const k = list.findIndex((x) => x.q !== list[0]!.q);
+    if (k > 0) { afterBreak = list.slice(k); list = list.slice(0, k); }
     queue = list; qi = 0; mt = 0; shownBeats = 0;
     onFirstDone = first; onAllDone = all;
     if (!list.length) { onFirstDone = onAllDone = null; first(); all(); return; }
@@ -709,7 +714,10 @@ export async function mountPractice(): Promise<void> {
   // After a play, or a kick.
   function resultPanel(): HTMLElement[] {
     const out: HTMLElement[] = [];
-    const ev = resultEvents.map(eventText).filter(Boolean) as string[];
+    // What happened up to the half: the second-half kickoff is told after
+    // the break, when it is drawn.
+    const upTo = resultEvents.findIndex((e) => e.kind === 'half');
+    const ev = (upTo < 0 ? resultEvents : resultEvents.slice(0, upTo + 1)).map(eventText).filter(Boolean) as string[];
     const head = el('div', 'pr-result-head');
     const bar = el('span', 'pr-bar'); bar.style.background = colourOf(resultFrom);
     if (result) {
@@ -967,6 +975,7 @@ export async function mountPractice(): Promise<void> {
   function next(): void {
     queue = []; qi = 0; camera = null; result = null;
     if (game.phase === 'over') { gameOver(); return; }
+    if (game.quarter !== shownQ) { quarterBreak(); return; }
     if (game.phase === 'fourth') {
       if (game.poss === 'user') { mode = 'fourth'; paint(); draw(); return; }
       const c = game.cpuFourth();
@@ -981,6 +990,7 @@ export async function mountPractice(): Promise<void> {
   function toCall(): void {
     queue = []; qi = 0; camera = null;
     if (game.phase === 'over') { gameOver(); return; }
+    shownQ = game.quarter;
     // Each snap opens on the league's most common call for the down and
     // distance, and on offence with the defence still in its huddle.
     const sit = game.situation();
@@ -992,6 +1002,69 @@ export async function mountPractice(): Promise<void> {
     selected = null; lined = false; lineT = 1;
     mode = 'call';
     paint(); draw();
+  }
+
+  // ── Between quarters.
+  /** The quarter the user last called a snap in, and anything drawn after
+   *  the break that is not to be shown before it. */
+  let shownQ = 1;
+  let afterBreak: Queued[] = [];
+  /** The break between quarters, put in front of everything: the score, and
+   *  which way the user is going now — the ends change every quarter, and
+   *  without it the next snap simply faces the other way. */
+  function quarterBreak(): void {
+    const from = shownQ, to = game.quarter, half = to === 3;
+    shownQ = to;
+    const d = dirOf('user', to);
+    const score = el('div', 'pr-break-score');
+    for (const s of ['user', 'cpu'] as const) {
+      const side = el('div', `pr-break-side ${s}`);
+      const img = el('img'); img.src = u(`/logos/${team(s).team}.png`); img.alt = ''; img.width = img.height = 44;
+      const name = el('span', 'pr-break-who', nickOf(s));
+      side.append(img, name, el('span', 'pr-break-pts', String(game.score[s])));
+      side.style.setProperty('--club', colourOf(s));
+      score.append(side);
+    }
+    // A field in miniature, each club's crest in the end zone it defends, and
+    // an arrow the way the user now attacks.
+    const ends = el('div', 'pr-ends');
+    ends.dataset.dir = d === 1 ? 'right' : 'left';
+    ends.style.setProperty('--you', colourOf('user'));
+    for (const s of d === 1 ? (['user', 'cpu'] as const) : (['cpu', 'user'] as const)) {
+      const ez = el('span', 'pr-ez'), img = el('img');
+      img.src = u(`/logos/${team(s).team}.png`); img.alt = ''; ez.append(img);
+      ends.append(ez);
+      if (!ends.querySelector('.pr-ends-mid')) {
+        const mid = el('span', 'pr-ends-mid');
+        mid.append(el('span', 'pr-arrow'), el('span', 'pr-ends-label', `You attack this way`));
+        ends.append(mid);
+      }
+    }
+    const what = half ? `${nickOf(game.poss)} receive the second-half kickoff.`
+      : `${nickOf(game.poss)}’ ball, ${bugNow().down.toLowerCase()} at ${game.spot()}.`;
+    const go = button(half ? 'Start the second half' : `Start the ${ORD[to]} quarter`, () => breakBox.close(), 'pr-go');
+    const body = el('div', 'pr-break-body');
+    body.append(
+      el('p', 'pr-eyebrow', half ? 'Half-time' : `End of the ${ORD[from]} quarter`),
+      el('h2', 'pr-break-title', half ? 'Second half' : `${ORD[to]} quarter`),
+      score, ends,
+      el('p', 'pr-lede', `The teams change ends — you now attack to the ${d === 1 ? 'right' : 'left'}.`),
+      el('p', 'pr-note', what),
+      actions(go));
+    breakBox.replaceChildren(body);
+    breakBox.setAttribute('aria-label', half ? 'Half-time' : `End of the ${ORD[from]} quarter`);
+    // Closed by its button or by Escape; either way the game goes on.
+    breakBox.addEventListener('close', () => {
+      breakBox.replaceChildren();
+      if (!afterBreak.length) { next(); return; }
+      const list = afterBreak; afterBreak = [];
+      const ko = resultEvents.find((e) => e.kind === 'kickoff' && e.q === game.quarter);
+      playing = (ko && eventText(ko)) ?? 'Kickoff.';
+      frozen = { ...bugNow(), down: 'Kickoff', clock: `Q${game.quarter} ${mmss(quarterMin * 60)}` };
+      play(list, () => {}, () => next());
+    }, { once: true });
+    breakBox.showModal();
+    go.focus();
   }
 
   function gameOver(): void { mode = 'over'; queue = []; paint(); draw(); }

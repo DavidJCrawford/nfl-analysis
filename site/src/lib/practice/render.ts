@@ -31,13 +31,16 @@ export interface View {
 }
 
 /** A view of the field: scale from the height, camera from the line. */
-export function view(w: number, h: number, los: number, dir: 1 | -1, focus?: number): View {
+/** `beyond` lets the camera go that many yards past the end lines — for a
+ *  kick at the posts, so the ball is seen to clear them and land. */
+export function view(w: number, h: number, los: number, dir: 1 | -1, focus?: number, beyond = 0): View {
   const pad = clamp(h * 0.04, 6, 22);
   const scale = Math.min((h - pad * 2) / FIELD_W, w / 60);
   const losAbs = dir === 1 ? los : 100 - los;
   const visible = w / scale;
   const want = focus ?? losAbs + dir * Math.min(12, visible * 0.18);
-  const cx = visible >= 120 ? 50 : clamp(want, -10 + visible / 2, 110 - visible / 2);
+  const lo = -10 - beyond + visible / 2, hi = 110 + beyond - visible / 2;
+  const cx = lo >= hi ? 50 : clamp(want, lo, hi);
   const top = (h - FIELD_W * scale) / 2;
   return { w, h, scale, cx, top, dir, losAbs };
 }

@@ -289,15 +289,25 @@ export function puntReel(kick: TeamDoc, recv: TeamDoc, from: number, net: number
 /** A place kick from `from` (the line of scrimmage, kicking frame), good or
  *  not. The posts are at the back of the end zone, eighteen and a half feet
  *  apart — the same width, it happens, as the hash marks. */
+/** The share of a half-sine the kick's flight covers, so that it is END_H
+ *  yards up a yard past the posts — having crossed them at about LIFT_AT. */
+const END_H = 1.9, ARC = 1 - Math.asin(END_H / 11) / Math.PI;
 export function placeKickReel(kick: TeamDoc, block: TeamDoc, from: number, good: boolean, pat: boolean): Reel {
   const rand = seeded(from * 29 + (good ? 1 : 2));
   const posts = 100 - from + 10;
   const tSnap = 0.4, tKick = 1.3;
   const length = posts + 7;
   const tFly = tKick + 0.5 + length / 26;
-  const wide = good ? 0 : (rand() < 0.5 ? 1 : -1) * (HASH + 0.8 + rand() * 2.5);
+  // The field is drawn from above, with a ball in the air lifted up the
+  // screen by its height (render.ts), and the posts are drawn on the ground.
+  // So the kick comes down to just over the bar as it gets there — LIFT_AT
+  // yards up — and is aimed so that, lifted, it is drawn between the uprights
+  // when it is good and clear of them when it is wide, whichever way the
+  // kick is going.
+  const LIFT_AT = 3, lift = LIFT_AT * 0.55;
+  const wide = good ? 0 : (rand() < 0.5 ? 1 : -1) * (HASH + lift + 0.9 + rand() * 2.5);
   const short = !good && length > 50 && rand() < 0.4;
-  const T: Spot = short ? { x: posts - 4 - rand() * 4, y: (rand() - 0.5) * 3 } : { x: posts + 1, y: good ? (rand() - 0.5) * HASH * 1.2 : wide };
+  const T: Spot = short ? { x: posts - 4 - rand() * 4, y: (rand() - 0.5) * 3 } : { x: posts + 1, y: good ? (rand() - 0.5) * 2 * (HASH - lift - 0.6) : wide };
   const tEnd = tFly + 0.3;
   const frames = Math.round((tEnd + 1.3) * FPS), whistle = Math.round(tEnd * FPS);
   const st = new Stage(frames);
@@ -331,10 +341,10 @@ export function placeKickReel(kick: TeamDoc, block: TeamDoc, from: number, good:
     else if (t < tFly) {
       const u = (t - tKick) / (tFly - tKick);
       const p = lerp({ x: -7, y: 0 }, T, u);
-      // Rising all the way to the posts, as a kick does, then dropping
-      // beyond them.
-      b = [p.x, p.y, short ? Math.sin(Math.PI * u) * 8 : Math.sin(Math.PI * u * 0.62) * 11];
-    } else { const u = Math.min(1, (t - tFly) / 0.5); b = [T.x + u * (short ? 1 : 4), T.y, short ? 0 : (1 - u) * 7]; }
+      // Up to its height and back down to just over the bar at the posts,
+      // then dropping beyond them.
+      b = [p.x, p.y, short ? Math.sin(Math.PI * u) * 8 : Math.sin(Math.PI * u * ARC) * 11];
+    } else { const u = Math.min(1, (t - tFly) / 0.5); b = [T.x + u * (short ? 1 : 4), T.y, short ? 0 : (1 - u) * END_H]; }
     ball.set(b, f * 3);
   }
   void iH;

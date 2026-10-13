@@ -347,8 +347,12 @@ page, beside Compare, through the same picker. `&q=8` sets the quarter length
 in minutes (default 5); `&seed=` replays a game exactly, for testing.
 
 The field and one panel beside it (under it, on a narrow screen). Nothing is
-ever put over the field: it is the thing being watched, so everything the
-user reads or chooses is in the panel.
+put over the field: it is the thing being watched, so everything the user
+reads or chooses is in the panel. The one exception is the break between
+quarters — a dialog with the score, a field in miniature with the crests in
+the ends each club defends and an arrow the way the user now attacks — since
+the ends change every quarter and without it the next snap simply faces the
+other way. At the half it comes before the second-half kickoff is drawn.
 
 - **Before the snap** the panel opens with the other side — what it is
   showing (its formation, or its shell: one deep safety or two, the one thing
@@ -380,6 +384,11 @@ user reads or chooses is in the panel.
   nine in the setup zone, two deep, nobody moving until the catch — every
   punt, field goal and extra point. They queue after the snap that set them
   off: a touchdown, then its extra point, then the kickoff.
+- **A place kick is drawn to read true from above.** A ball in the air is
+  lifted up the screen by its height and the posts are drawn on the ground,
+  so a kick comes down to just over the bar as it reaches them, aimed so it
+  is drawn between the uprights when good and clear of them when not, and
+  the camera may run past the end line to see it land.
 - **After the play** the panel gives the result, the other side's call, and
   the arithmetic that decided it.
 - **Fourth down** offers go, kick or punt, with the league's go-rate and the
