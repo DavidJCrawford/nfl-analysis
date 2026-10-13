@@ -168,6 +168,9 @@ export function choreograph(r: Result): Movie {
   // Measured on a pass, for the next: where the tackler and the carrier
   // were when the ball changed hands.
   let tacklerAt: Spot | null = null, carrierAt: Spot | null = null;
+  // After an interception the offence has to make the tackle: whoever is
+  // nearest the spot the engine puts the returner down, when he picks it off.
+  let intTackler: OffSlot | null = null;
 
   // The man who makes the tackle, sack or pick: the engine's credit, or else
   // whoever is nearest when it comes to it.
@@ -179,7 +182,7 @@ export function choreograph(r: Result): Movie {
   whistle = Math.round(tEnd! * FPS);
   frames = whistle + Math.round(1.1 * FPS);
   throwFrom = tr && tr.tThrow !== null ? { x: tr.ball[Math.round(tr.tThrow * FPS) * 3]!, y: tr.ball[Math.round(tr.tThrow * FPS) * 3 + 1]! } : null;
-  tacklerAt = null; carrierAt = null; arrived = null; settle = null;
+  tacklerAt = null; carrierAt = null; arrived = null; settle = null; intTackler = null;
   // ── State.
   const pos: Record<string, Spot> = {};
   for (const s of oSlots) pos[`o${s}`] = { ...O0[s]! };
@@ -211,10 +214,27 @@ export function choreograph(r: Result): Movie {
     const hasBall = ck && t >= tCarry;
 
     // ── Offence.
+    const turned = r.kind === 'int' && hasBall;
+    if (turned && !intTackler && !r.td) {
+      let d = Infinity;
+      for (const s of oSlots) { const q = dist(pos[`o${s}`]!, E); if (q < d) { d = q; intTackler = s; } }
+    }
     for (const s of oSlots) {
       const k = `o${s}`, p0 = O0[s]!;
       let p = pos[k]!;
       if (done) { /* stand */ }
+      else if (turned) {
+        // The ball has changed hands, and the offence is the defence now:
+        // every man turns and goes after the one who has it — the linemen at
+        // their pace — and the nearest to where he goes down gets there to
+        // bring him down. On a return all the way, nobody catches him.
+        const c = pos[ck!]!;
+        if (s === intTackler) {
+          tacklerAt ??= { ...p };
+          const away = dist(p, E) || 1;
+          p = sprint(p, { x: E.x + (p.x - E.x) / away * 0.7, y: E.y + (p.y - E.y) / away * 0.7 }, tEnd! - t, 6.4);
+        } else if (dist(p, c) > 1.3) p = step(p, c, ['LT', 'LG', 'C', 'RG', 'RT'].includes(s) ? 4.4 : 6.6);
+      }
       else if (hasBall && k === ck) {
         // The ball-carrier: from where he got it to where the engine put him down.
         carrierFrom ??= { ...p };
@@ -288,6 +308,22 @@ export function choreograph(r: Result): Movie {
       } else if (r.kind === 'sack' && s === presser) {
         const tp = tPress ?? 2.7;
         p = t < tp - 0.9 ? step(p, { x: -1.4, y: p0.y }, 2) : sprint(p, { x: qb.x + 0.7, y: qb.y }, tp - t, 4);
+      } else if (ballSpot && r.kind === 'int') {
+        // A pick: the rest of the defence turns blocker, each taking the
+        // nearest man chasing — between him and the ball — and leaving the
+        // one who makes the tackle to make it.
+        let mark: Spot | null = null, md = Infinity;
+        for (const os of oSlots) {
+          if (os === intTackler) continue;
+          const q = pos[`o${os}`]!;
+          if (dist(q, ballSpot) > 12) continue;
+          const d = dist(p, q);
+          if (d < md) { md = d; mark = q; }
+        }
+        if (mark) {
+          const toward = dist(mark, ballSpot) || 1;
+          p = step(p, { x: mark.x + (ballSpot.x - mark.x) / toward, y: mark.y + (ballSpot.y - mark.y) / toward }, 6.4);
+        } else if (dist(p, ballSpot) > 3) p = step(p, ballSpot, 5.5);
       } else if (ballSpot) {
         // Pursuit: everyone at the man with the ball, stopping short of him.
         const d = dist(p, ballSpot);
@@ -397,7 +433,7 @@ export function choreograph(r: Result): Movie {
     if (r.kind === 'int' || r.kind === 'complete' || r.kind === 'scramble') want = Math.max(want, tCarry + dist(from, E) / 7.5);
     // The tackler at a hard run rather than a flat sprint — but never at the
     // cost of slowing the carrier below a jog.
-    if (tacklerAt && !r.td && r.kind !== 'int') {
+    if (tacklerAt && !r.td) {
       const isBack = r.kind === 'run' && r.ballCarrier !== 'QB';
       const slowest = (isBack ? tGap : tCarry) + (isBack && tGap > tCarry ? dist(gapPt!, E) : dist(from, E)) / 4.2;
       want = Math.max(want, Math.min(tCarry + dist(tacklerAt, E) / 8.2, slowest));

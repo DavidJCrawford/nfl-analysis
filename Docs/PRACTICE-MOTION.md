@@ -1839,3 +1839,23 @@ be partly a difference of measure: Next Gen Stats' separation is the distance
 to the nearest defender when the ball arrives, tracked; the engine's is the
 same, but from a defender who has run a straight, perfect line to it. Where the
 league's charting can be matched, it now is.
+
+## 32. After an interception
+
+An interception changed who had the ball and nothing else: the receivers ran
+out their routes, the line held its pass sets, no one was sent to make the
+tackle (the choreography named a tackler for every carry but a pick), and the
+rest of the defence chased its own man. The returner ran to the engine's spot
+and stopped there with nobody near him. Across 60 picks from simulated games
+the nearest offensive player at the whistle was 7.9 yards from him on average
+(20.8 at worst), and the offence had moved 1.1 yards each after the catch.
+
+Now the offence turns when the ball does (choreo.ts): every man chases the
+returner, the linemen at 4.4 yards a second; the one nearest the spot where
+he goes down is timed to arrive there and make the tackle; and the defence
+peels off to block, each defender taking the nearest chaser and leaving the
+tackler to his tackle. On a return all the way nobody is picked to catch him.
+Over the same 60: the tackler 0.6 yards from the returner at the whistle (1.0
+at worst), three of the offence within six yards, each man 8.3 yards on from
+where he was at the catch, and nobody faster than a man can run. Drawn only:
+where the returner goes down is the engine's, as before.
