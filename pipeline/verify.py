@@ -28,6 +28,7 @@ import collections
 import csv
 import json
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -56,6 +57,21 @@ class Report:
     def eq(self, got, want, message: str) -> bool:
         return self.ok(got == want, f"{message}: got {got!r}, expected {want!r}")
 
+
+
+_SPOT = re.compile(r"\b(?:to|at) (?:([A-Z]{2,3}) )?(\d{1,2})\b")
+
+
+def last_spot(desc: str, home: str) -> float | None:
+    """The last yard line a play's description names ("to NO 44", "at 50"),
+    as yards from the home side's goal line — the frame `x` is in."""
+    m = list(_SPOT.finditer(desc))
+    if not m:
+        return None
+    team, yd = m[-1].group(1), float(m[-1].group(2))
+    if yd == 50 or team is None:
+        return 50.0 if yd == 50 else None
+    return yd if team == home else 100.0 - yd
 
 def load(path: pathlib.Path):
     if not path.exists():
@@ -320,9 +336,13 @@ def check_actors(r: Report, game: dict) -> None:
                  f"{gid} play {p['id']}: {pen['who']!r} is not named in the description")
 
         # The bug this replaced: `yards_gained` is 0 on an interception, which
-        # left the ball sitting on the line of scrimmage.
+        # left the ball sitting on the line of scrimmage. A pick can end there
+        # honestly — caught seven yards down and run seven back, as at the Giants
+        # in week 6 — so ending on the line is allowed when the description's
+        # own last spot says so.
         if "int" in tags and "td" not in tags and p.get("air") is not None:
-            r.ok(p.get("x1") != p.get("x0") or p["air"] == 0,
+            r.ok(p.get("x1") != p.get("x0") or p["air"] == 0
+                 or last_spot(p["desc"], game["home"]) == p.get("x0"),
                  f"{gid} play {p['id']}: an interception that ends where it was thrown")
 
         # A placekick is the one play whose end spot is decided by the result
