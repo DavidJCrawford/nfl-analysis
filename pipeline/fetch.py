@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pathlib
 import sys
+import time
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -43,15 +44,26 @@ WANTED = [
 ]
 
 
+# GitHub's release downloads time out now and then — a 504 on two files of
+# ten, the rest fine, and the same two fine half a minute later. So each file
+# is tried again before it is given up on.
+WAITS = (15, 45)
+
+
 def grab(release: str, asset: str, out: pathlib.Path) -> bool:
     url = f"{BASE}/{release}/{asset}"
     req = urllib.request.Request(url, headers={"User-Agent": "nfl-analysis/0.1 (personal project)"})
-    try:
-        with urllib.request.urlopen(req, timeout=300) as r:
-            out.write_bytes(r.read())
-    except Exception as e:
-        print(f"  {asset}: {e}")
-        return False
+    for attempt in range(len(WAITS) + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                out.write_bytes(r.read())
+            break
+        except Exception as e:
+            if attempt == len(WAITS):
+                print(f"  {asset}: {e} — gave up after {attempt + 1} tries")
+                return False
+            print(f"  {asset}: {e} — trying again in {WAITS[attempt]}s")
+            time.sleep(WAITS[attempt])
     print(f"  {asset} -> {out.name} ({out.stat().st_size / 1024 / 1024:.1f} MB)")
     return True
 
@@ -213,7 +225,10 @@ def main() -> int:
     logos()
     league_mark()
     headshots(season)
-    return 0 if ok else 1
+    # All or nothing. A file that did not come down leaves last week's copy in
+    # the cache, and the rest of the refresh would build on it as if it were
+    # this week's — the season totals a week behind the games they sum.
+    return 0 if ok == len(WANTED) else 1
 
 
 if __name__ == "__main__":
