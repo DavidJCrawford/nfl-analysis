@@ -620,6 +620,14 @@ def build_play(r: dict, home: str, away: str, notes: list[str],
     # no fumble flag: every one a kickoff the returner bobbled and picked back
     # up himself, and none of them a turnover.
     if flag(r, "fumble") and (who := s(r, "fumbled_1_player_name")):
+        # Fumbled twice by the same side, it is the second man who lost it:
+        # 2026 week 8, TB at ATL — Mayfield fumbles and falls on it, laterals
+        # to Irving, and Irving fumbles out of the end zone. Fumbled the second
+        # time by the man who had just recovered it, it is still the first
+        # (week 3, IND at HOU; week 5, CIN at MIA).
+        again = s(r, "fumbled_2_player_name")
+        if again and s(r, "fumbled_2_team") == s(r, "fumbled_1_team"):
+            who = again
         fum: dict = {"by": {"n": who, "j": jersey_of(play["desc"], who)},
                      "team": s(r, "fumbled_1_team"),
                      "lost": flag(r, "fumble_lost")}
@@ -627,8 +635,10 @@ def build_play(r: dict, home: str, away: str, notes: list[str],
         # again on the same play has a second recovery, and that is who has it
         # when the whistle goes. (2026 week 5, CLE at NYJ: Watson sacked,
         # fumbles, picks it up, fumbles again, and the Jets recover — the first
-        # recovery is Cleveland's, the second the one that counts.)
-        n = 2 if s(r, "fumble_recovery_2_team") else 1
+        # recovery is Cleveland's, the second the one that counts.) Fumbled a
+        # second time and not recovered — out of bounds, a touchback — nobody
+        # has it, and the first recovery is not the answer.
+        n = 2 if (again or s(r, "fumble_recovery_2_team")) else 1
         if (rec := s(r, f"fumble_recovery_{n}_player_name")):
             fum["rec"] = {"n": rec, "j": jersey_of(play["desc"], rec)}
         if (rt := s(r, f"fumble_recovery_{n}_team")):
@@ -809,7 +819,11 @@ def build_box(rows: list[dict], drives: list[dict], home: str, away: str) -> dic
             t["sack_yards"] += -(i(r, "yards_gained") or 0)
         if flag(r, "rush_attempt") and not flag(r, "two_point_attempt"):
             t["rush_att"] += 1
-            t["rush_yards"] += i(r, "rushing_yards") or 0
+            # A run after a loose ball is a lateral to nflverse and its yards
+            # are kept apart — 2026 week 8, NE at MIA: the snap fumbled, Maye
+            # picks it up and runs, and `rushing_yards` is 0 with the yard he
+            # made in `lateral_rushing_yards`. Its team total counts them both.
+            t["rush_yards"] += (i(r, "rushing_yards") or 0) + (i(r, "lateral_rushing_yards") or 0)
         # nflverse sets pass_attempt on a sack — it marks a dropback, not an
         # official attempt — and a sack is not a pass attempt on any box score
         # the NFL prints. Counting it as one inflated every team's attempts by
